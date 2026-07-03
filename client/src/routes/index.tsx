@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AuthDialog } from "@/components/auth-dialog";
 import heroRiad from "@/assets/hero-riad.jpg";
 import destMarrakech from "@/assets/dest-marrakech.jpg";
 import destChefchaouen from "@/assets/dest-chefchaouen.jpg";
@@ -106,15 +107,26 @@ const testimonials = [
 
 function Nav() {
   const [scrolled, setScrolled] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
+    const onScroll = () => {
+      if (authOpen) return;
+      setScrolled(window.scrollY > 20);
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [authOpen]);
+
+  useEffect(() => {
+    if (!authOpen) {
+      setScrolled(window.scrollY > 20);
+    }
+  }, [authOpen]);
 
   return (
+    <>
     <header
       className={cn(
         "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-300",
@@ -146,7 +158,11 @@ function Nav() {
           <a href="#contact" className="opacity-80 transition hover:opacity-100">Aide</a>
         </nav>
         <div className="flex items-center gap-3">
-          <button className="hidden text-sm text-foreground/80 transition hover:text-foreground sm:block">
+          <button
+            type="button"
+            onClick={() => setAuthOpen(true)}
+            className="hidden text-sm text-foreground/80 transition hover:text-foreground sm:block"
+          >
             Se connecter
           </button>
           <button className="rounded-full px-4 py-2 text-sm font-medium text-foreground ring-1 ring-border transition hover:bg-muted">
@@ -155,6 +171,8 @@ function Nav() {
         </div>
       </div>
     </header>
+    <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
+    </>
   );
 }
 
