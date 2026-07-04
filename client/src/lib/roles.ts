@@ -16,6 +16,14 @@ export function isAdminRole(roleId: number | null | undefined) {
   return roleId === ROLE_IDS.SUPER_ADMIN || roleId === ROLE_IDS.ADMIN;
 }
 
+export function canManageMaisons(roleId: number | null | undefined) {
+  return (
+    roleId === ROLE_IDS.SUPER_ADMIN ||
+    roleId === ROLE_IDS.ADMIN ||
+    roleId === ROLE_IDS.RECEPTIONNISTE
+  );
+}
+
 export function getRoleLabel(roleId: number | null | undefined) {
   if (!roleId) {
     return "—";

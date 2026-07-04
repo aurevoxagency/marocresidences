@@ -2,18 +2,33 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  BadgePercent,
   Bell,
+  BriefcaseBusiness,
+  CalendarDays,
+  CalendarRange,
   ChevronDown,
+  CircleDollarSign,
+  ClipboardList,
+  CreditCard,
+  Home,
   LayoutDashboard,
   LogOut,
   Maximize,
+  MessageSquareQuote,
   Minimize,
+  Receipt,
   Search,
+  UserPlus,
   UserRound,
+  Users,
   UsersRound,
+  Wallet,
 } from "lucide-react";
 
 import { AccountSettings } from "@/components/account-settings";
+import { DashboardOverview } from "@/components/dashboard-overview";
+import { MaisonsManagement } from "@/components/maisons-management";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,13 +45,44 @@ import {
   getAuthToken,
   type AuthUser,
 } from "@/lib/auth";
-import { getRoleLabel, isAdminRole } from "@/lib/roles";
+import { canManageMaisons, getRoleLabel, isAdminRole } from "@/lib/roles";
 
 export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
-type DashboardView = "dashboard" | "users" | "account";
+type DashboardView =
+  | "dashboard"
+  | "maisons"
+  | "prospects"
+  | "clients"
+  | "reservations"
+  | "gestion_commerciale"
+  | "gestion_saison"
+  | "promotions"
+  | "gestion_financiere"
+  | "paiements"
+  | "facturation"
+  | "journal_transactions"
+  | "chiffre_affaires"
+  | "avis_clients"
+  | "users"
+  | "account";
+
+const PLACEHOLDER_VIEWS = new Set<DashboardView>([
+  "prospects",
+  "clients",
+  "reservations",
+  "gestion_commerciale",
+  "gestion_saison",
+  "promotions",
+  "gestion_financiere",
+  "paiements",
+  "facturation",
+  "journal_transactions",
+  "chiffre_affaires",
+  "avis_clients",
+]);
 
 function SidebarItem({
   icon: Icon,
@@ -70,8 +116,28 @@ function SidebarItem({
       >
         <Icon className="h-4 w-4" />
       </span>
-      <span>{label}</span>
+      <span className="leading-tight">{label}</span>
     </button>
+  );
+}
+
+function PlaceholderModule({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-[0_12px_24px_-20px_rgba(15,23,42,0.45)]">
+      <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">{title}</h2>
+      <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-slate-500">
+        {description}
+      </p>
+      <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-500">
+        Module en préparation — le contenu sera ajouté prochainement.
+      </div>
+    </div>
   );
 }
 
@@ -87,18 +153,41 @@ function DashboardPage() {
     : "";
 
   const isAdmin = isAdminRole(user?.role_id);
+  const canManageGuestHouses = canManageMaisons(user?.role_id);
 
   const sidebarItems = useMemo(() => {
     const items: { id: DashboardView; label: string; icon: LucideIcon }[] = [
       { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     ];
 
+    if (canManageGuestHouses) {
+      items.push(
+        { id: "maisons", label: "Maisons d'hôtes", icon: Home },
+        { id: "prospects", label: "Prospects", icon: UserPlus },
+        { id: "clients", label: "Clients", icon: Users },
+        { id: "reservations", label: "Réservations", icon: CalendarDays },
+        { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
+        { id: "gestion_saison", label: "Gestion saison", icon: CalendarRange },
+        { id: "promotions", label: "Promotions", icon: BadgePercent },
+        { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
+        { id: "paiements", label: "Paiements", icon: CreditCard },
+        { id: "facturation", label: "Facturation", icon: Receipt },
+        { id: "journal_transactions", label: "Journal des transactions", icon: ClipboardList },
+        { id: "chiffre_affaires", label: "Chiffre d'affaires", icon: CircleDollarSign },
+        { id: "avis_clients", label: "Gestion avis clients", icon: MessageSquareQuote }
+      );
+    }
+
     if (isAdmin) {
       items.push({ id: "users", label: "Utilisateurs", icon: UsersRound });
     }
 
     return items;
-  }, [isAdmin]);
+  }, [canManageGuestHouses, isAdmin]);
+
+  const activePlaceholder = useMemo(() => {
+    return sidebarItems.find((item) => item.id === activeView);
+  }, [activeView, sidebarItems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,40 +305,37 @@ function DashboardPage() {
 
         <div
           className={[
-            "grid lg:grid-cols-[280px_1fr]",
-            isFullscreen ? "min-h-0 flex-1" : "min-h-[calc(100vh-90px)]",
+            "grid min-h-0 lg:grid-cols-[280px_1fr]",
+            isFullscreen ? "flex-1" : "h-[calc(100vh-7.5rem)]",
           ].join(" ")}
         >
-          <aside
-            className={[
-              "flex flex-col border-r border-slate-200 bg-[#fbfcff] p-5",
-              isFullscreen ? "min-h-0 flex-1" : "min-h-[calc(100vh-90px)]",
-            ].join(" ")}
-          >
-            <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.6)]">
-              <div className="flex items-center gap-3">
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#ec4899] text-sm font-semibold text-white">
-                  {initials}
+          <aside className="flex h-full min-h-0 flex-col overflow-hidden border-r border-slate-200 bg-[#fbfcff]">
+            <div className="shrink-0 p-5 pb-0">
+              <div className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.6)]">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#ec4899] text-sm font-semibold text-white">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-semibold text-slate-900">
+                      {user.first_name} {user.last_name}
+                    </p>
+                    <p className="truncate text-[11px] font-medium text-[#7a34c9]">
+                      {getRoleLabel(user.role_id)}
+                    </p>
+                    <p className="truncate text-[11px] text-emerald-500">Connecté</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-semibold text-slate-900">
-                    {user.first_name} {user.last_name}
-                  </p>
-                  <p className="truncate text-[11px] font-medium text-[#7a34c9]">
-                    {getRoleLabel(user.role_id)}
-                  </p>
-                  <p className="truncate text-[11px] text-emerald-500">Connecté</p>
-                </div>
-              </div>
 
-              <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
-                <Search className="h-4 w-4 text-slate-400" />
-                <span className="text-[12px] text-slate-400">Maroc Résidences</span>
-                <Bell className="ml-auto h-4 w-4 text-slate-400" />
+                <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <span className="text-[12px] text-slate-400">Maroc Résidences</span>
+                  <Bell className="ml-auto h-4 w-4 text-slate-400" />
+                </div>
               </div>
             </div>
 
-            <div className="mt-5 space-y-1.5">
+            <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-5 py-4">
               {sidebarItems.map((item) => (
                 <SidebarItem
                   key={item.id}
@@ -259,21 +345,23 @@ function DashboardPage() {
                   onClick={() => setActiveView(item.id)}
                 />
               ))}
-            </div>
+            </nav>
 
-            <div className="mt-auto rounded-2xl border border-slate-200 bg-white p-4">
-              <Button
-                variant="outline"
-                className="w-full justify-center rounded-xl border-slate-200 bg-white py-5 text-[13px] font-semibold"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-                Déconnexion
-              </Button>
+            <div className="shrink-0 border-t border-slate-200 bg-[#fbfcff] p-5 pt-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <Button
+                  variant="outline"
+                  className="w-full justify-center rounded-xl border-slate-200 bg-white py-5 text-[13px] font-semibold"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Déconnexion
+                </Button>
+              </div>
             </div>
           </aside>
 
-          <section className="bg-[#fcfcfe] p-4 sm:p-6 lg:p-7">
+          <section className="min-h-0 overflow-y-auto bg-[#fcfcfe] p-4 sm:p-6 lg:p-7">
             <div className="mb-6 flex items-start justify-end">
               <div className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.42)] sm:p-5">
                 <DropdownMenu>
@@ -322,12 +410,30 @@ function DashboardPage() {
               </div>
             </div>
 
+            {activeView === "dashboard" ? (
+              <DashboardOverview
+                canManageMaisons={canManageGuestHouses}
+                isAdmin={isAdmin}
+              />
+            ) : null}
+
+            {activeView === "maisons" && canManageGuestHouses ? (
+              <MaisonsManagement />
+            ) : null}
+
             {activeView === "users" && isAdmin ? (
               <UsersManagement currentUserId={user.id} />
             ) : null}
 
             {activeView === "account" ? (
               <AccountSettings user={user} onUserUpdated={setUser} />
+            ) : null}
+
+            {PLACEHOLDER_VIEWS.has(activeView) && canManageGuestHouses && activePlaceholder ? (
+              <PlaceholderModule
+                title={activePlaceholder.label}
+                description={`Espace dédié à la gestion de « ${activePlaceholder.label.toLowerCase()} ».`}
+              />
             ) : null}
           </section>
         </div>

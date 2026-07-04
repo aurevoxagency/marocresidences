@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import {
   AlertDialog,
@@ -99,6 +99,8 @@ export function UsersManagement({ currentUserId }: { currentUserId: number }) {
   const [deleteTarget, setDeleteTarget] = useState<AuthUser | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterRole, setFilterRole] = useState<string>("all");
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -117,6 +119,33 @@ export function UsersManagement({ currentUserId }: { currentUserId: number }) {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  const filteredUsers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return users.filter((user) => {
+      if (filterRole !== "all" && String(user.role_id) !== filterRole) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        user.first_name,
+        user.last_name,
+        user.email,
+        user.phone,
+        getRoleLabel(user.role_id),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [users, search, filterRole]);
 
   const openCreateDialog = () => {
     setEditingUser(null);
@@ -226,11 +255,39 @@ export function UsersManagement({ currentUserId }: { currentUserId: number }) {
         </div>
       )}
 
-      <div className="mt-6 overflow-hidden rounded-[22px] border border-slate-200 bg-white">
+      <div className="mt-5 grid gap-3 rounded-[22px] border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_220px]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un utilisateur..."
+            className="pl-9"
+          />
+        </div>
+        <Select value={filterRole} onValueChange={setFilterRole}>
+          <SelectTrigger>
+            <SelectValue placeholder="Rôle" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les rôles</SelectItem>
+            <SelectItem value={String(ROLE_IDS.SUPER_ADMIN)}>Super admin</SelectItem>
+            <SelectItem value={String(ROLE_IDS.ADMIN)}>Admin</SelectItem>
+            <SelectItem value={String(ROLE_IDS.CLIENT)}>Client</SelectItem>
+            <SelectItem value={String(ROLE_IDS.RECEPTIONNISTE)}>Réceptionniste</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-[22px] border border-slate-200 bg-white">
         {loading ? (
           <p className="px-5 py-8 text-[13px] text-slate-500">Chargement des utilisateurs...</p>
         ) : users.length === 0 ? (
           <p className="px-5 py-8 text-[13px] text-slate-500">Aucun utilisateur trouvé.</p>
+        ) : filteredUsers.length === 0 ? (
+          <p className="px-5 py-8 text-[13px] text-slate-500">
+            Aucun résultat pour cette recherche ou ce filtre.
+          </p>
         ) : (
           <Table>
             <TableHeader className="bg-[#fbfcff]">
@@ -246,7 +303,7 @@ export function UsersManagement({ currentUserId }: { currentUserId: number }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="text-[13px] font-medium text-slate-800">
                     {user.first_name} {user.last_name}
