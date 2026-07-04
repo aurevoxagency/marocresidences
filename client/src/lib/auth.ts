@@ -22,7 +22,7 @@ function logAuthError(scope: string, error: unknown) {
 }
 
 export function getApiBaseUrl() {
-  return import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+  return import.meta.env.VITE_API_URL || "http://localhost:3500/api";
 }
 
 export function getAuthToken(): string | null {

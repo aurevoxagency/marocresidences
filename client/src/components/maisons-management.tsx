@@ -558,19 +558,19 @@ export function MaisonsManagement() {
 
   return (
     <div className="w-full">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0 lg:block">
+          <h2 className="hidden text-[22px] font-semibold tracking-tight text-slate-900 lg:block">
             Maisons d&apos;hôtes
           </h2>
-          <p className="mt-1 text-[13px] text-slate-500">
+          <p className="text-[13px] text-slate-500 lg:mt-1">
             Créer, modifier et supprimer les maisons d&apos;hôtes et leurs détails.
           </p>
         </div>
         <Button
           type="button"
           onClick={openCreateDialog}
-          className="rounded-xl bg-[#3b82f6] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#2563eb]"
+          className="w-full rounded-xl bg-[#3b82f6] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#2563eb] sm:w-auto"
         >
           <Plus className="h-4 w-4" />
           Ajouter une maison
@@ -583,7 +583,7 @@ export function MaisonsManagement() {
         </div>
       )}
 
-      <div className="mt-5 grid gap-3 rounded-[22px] border border-slate-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 sm:mt-5 sm:rounded-[22px] sm:p-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="relative sm:col-span-2 xl:col-span-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input

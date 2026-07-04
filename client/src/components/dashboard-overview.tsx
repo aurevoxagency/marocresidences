@@ -68,14 +68,16 @@ function StatCard({
   tone: string;
 }) {
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_12px_24px_-20px_rgba(15,23,42,0.45)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[12px] font-medium text-slate-500">{title}</p>
-          <p className="mt-2 text-[28px] font-semibold tracking-tight text-slate-900">{value}</p>
+    <article className="rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_12px_24px_-20px_rgba(15,23,42,0.45)] sm:p-4">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-slate-500 sm:text-[12px]">{title}</p>
+          <p className="mt-1.5 text-[22px] font-semibold tracking-tight text-slate-900 sm:mt-2 sm:text-[28px]">
+            {value}
+          </p>
         </div>
-        <span className={`grid h-11 w-11 place-items-center rounded-xl ${tone}`}>
-          <Icon className="h-5 w-5" />
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl sm:h-11 sm:w-11 ${tone}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </span>
       </div>
     </article>
@@ -213,8 +215,13 @@ export function DashboardOverview({
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div>
+    <div className="w-full space-y-4 sm:space-y-6">
+      <div className="lg:hidden">
+        <p className="text-[13px] text-slate-500">
+          Vue d&apos;ensemble des données disponibles.
+        </p>
+      </div>
+      <div className="hidden lg:block">
         <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">
           Tableau de bord
         </h2>
@@ -229,7 +236,7 @@ export function DashboardOverview({
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {canManageMaisons ? (
           <>
             <StatCard
