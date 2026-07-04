@@ -78,9 +78,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Dyafa — Maisons d'hôtes d'exception au Maroc" },
+      { title: "Maroc Residences — Maisons d'hôtes d'exception au Maroc" },
       { name: "description", content: "Réservez des riads et maisons d'hôtes vérifiés à Marrakech, Chefchaouen, Essaouira et dans tout le Maroc. Expérience premium, paiement sécurisé, support 24/7." },
-      { property: "og:title", content: "Dyafa — Maisons d'hôtes d'exception au Maroc" },
+      { property: "og:title", content: "Maroc Residences — Maisons d'hôtes d'exception au Maroc" },
       { property: "og:description", content: "Réservez des riads et maisons d'hôtes vérifiés partout au Maroc." },
       { property: "og:type", content: "website" },
       { property: "og:image", content: logo },

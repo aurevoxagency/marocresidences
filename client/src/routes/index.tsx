@@ -420,7 +420,7 @@ function Advantages() {
     <section id="experiences" className="mx-auto max-w-7xl px-6 py-24 lg:px-10 lg:py-32">
       <div className="mx-auto max-w-2xl text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--terracotta)" }}>
-          Pourquoi Dyafa
+          Pourquoi Maroc Residences
         </p>
         <h2 className="mt-3 text-4xl sm:text-5xl">La confiance, comme un art d'accueil.</h2>
       </div>
@@ -558,7 +558,7 @@ function Footer() {
       </div>
       <div className="border-t border-border/70">
         <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-2 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center lg:px-10">
-          <div>© {new Date().getFullYear()} Dyafa — Tous droits réservés.</div>
+          <div>© {new Date().getFullYear()} Maroc Residences — Tous droits réservés.</div>
           <div className="flex gap-5">
             <a href="#" className="hover:text-foreground">Confidentialité</a>
             <a href="#" className="hover:text-foreground">CGU</a>

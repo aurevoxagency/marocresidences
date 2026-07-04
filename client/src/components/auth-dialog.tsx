@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, Loader2, Mail, Lock, User, Phone } from "lucide-react";
 
 import logo from "@/assets/logo.jpg";
@@ -13,13 +14,27 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getApiBaseUrl, saveAuthToken, type AuthUser } from "@/lib/auth";
+
+function logClientAuth(scope: string, data?: unknown) {
+  console.log(`[CLIENT AUTH] ${scope}`, data ?? "");
+}
+
+function logClientAuthError(scope: string, error: unknown) {
+  console.error(`[CLIENT AUTH ERROR] ${scope}`, error);
+}
 
 type AuthDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultTab?: "login" | "register";
+};
+
+type AuthResponse = {
+  message?: string;
+  token?: string;
+  user?: AuthUser;
 };
 
 function PasswordField({
@@ -107,9 +122,11 @@ function Field({
 }
 
 export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDialogProps) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState(defaultTab);
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -126,9 +143,18 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
   const scrollYRef = useRef(0);
 
   const resetState = () => {
-    setSubmitted(false);
     setLoading(false);
+    setErrorMessage("");
+    setSuccessMessage("");
   };
+
+  useEffect(() => {
+    if (open) {
+      setTab(defaultTab);
+      setErrorMessage("");
+      setSuccessMessage("");
+    }
+  }, [defaultTab, open]);
 
   const handleOpenChange = (next: boolean) => {
     if (next) {
@@ -143,19 +169,132 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
     onOpenChange(next);
   };
 
-  const simulateSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    window.setTimeout(() => {
-      setLoading(false);
-      setSubmitted(true);
-    }, 900);
+  const handleAuthSuccess = async (token: string) => {
+    logClientAuth("Login success, redirecting to dashboard");
+    saveAuthToken(token, remember);
+    resetState();
+    onOpenChange(false);
+    await navigate({ to: "/dashboard" });
   };
 
-  const handleRegister = (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setSuccessMessage("");
+    setLoading(true);
+
+    const loginUrl = `${getApiBaseUrl()}/users/login`;
+    const loginPayload = {
+      email: loginEmail,
+      password: loginPassword,
+    };
+
+    logClientAuth("Login request", {
+      url: loginUrl,
+      email: loginEmail,
+    });
+
+    try {
+      const response = await fetch(loginUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(loginPayload),
+      });
+
+      const data = (await response.json().catch((error) => {
+        logClientAuthError("Failed to parse login response", error);
+        return {};
+      })) as AuthResponse;
+
+      logClientAuth("Login response", {
+        status: response.status,
+        ok: response.ok,
+        message: data.message,
+        hasToken: Boolean(data.token),
+        user: data.user,
+        role_id: data.user?.role_id,
+      });
+
+      if (!response.ok || !data.token) {
+        throw new Error(data.message || "Connexion impossible.");
+      }
+
+      await handleAuthSuccess(data.token);
+    } catch (error) {
+      logClientAuthError("Login failed", error);
+      setErrorMessage(error instanceof Error ? error.message : "Connexion impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     if (registerPassword !== confirmPassword) return;
-    simulateSubmit(e);
+    setErrorMessage("");
+    setSuccessMessage("");
+    setLoading(true);
+
+    const registerUrl = `${getApiBaseUrl()}/users/register`;
+    const registerPayload = {
+      first_name: firstName,
+      last_name: lastName,
+      email: registerEmail,
+      phone,
+      password: registerPassword,
+      terms_accepted: acceptTerms,
+    };
+
+    logClientAuth("Register request", {
+      url: registerUrl,
+      payload: registerPayload,
+    });
+
+    try {
+      const registerResponse = await fetch(registerUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(registerPayload),
+      });
+
+      const registerData = (await registerResponse.json().catch((error) => {
+        logClientAuthError("Failed to parse register response", error);
+        return {};
+      })) as AuthResponse;
+
+      logClientAuth("Register response", {
+        status: registerResponse.status,
+        ok: registerResponse.ok,
+        message: registerData.message,
+        user: registerData.user,
+        role_id: registerData.user?.role_id,
+      });
+
+      if (!registerResponse.ok) {
+        throw new Error(registerData.message || "Inscription impossible.");
+      }
+      setLoginEmail(registerEmail);
+      setLoginPassword("");
+      setFirstName("");
+      setLastName("");
+      setPhone("");
+      setRegisterEmail("");
+      setRegisterPassword("");
+      setConfirmPassword("");
+      setAcceptTerms(false);
+      setTab("login");
+      setSuccessMessage("Compte cree avec succes. Connectez-vous maintenant.");
+      logClientAuth("Register success, switched to login tab");
+    } catch (error) {
+      logClientAuthError("Register failed", error);
+      setErrorMessage(error instanceof Error ? error.message : "Inscription impossible.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -169,41 +308,24 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
             <img src={logo} alt="Maroc Résidences" className="h-11 w-auto object-contain" />
             <div className="space-y-1.5">
               <DialogTitle className="font-display text-2xl font-medium">
-                {submitted ? "Bienvenue !" : "Votre espace voyageur"}
+                Votre espace voyageur
               </DialogTitle>
               <DialogDescription>
-                {submitted
-                  ? "Votre demande a bien été enregistrée. Nous vous contacterons très bientôt."
-                  : "Connectez-vous ou créez un compte pour réserver vos séjours au Maroc."}
+                Connectez-vous ou créez un compte pour réserver vos séjours au Maroc.
               </DialogDescription>
             </div>
           </DialogHeader>
         </div>
 
-        {submitted ? (
-          <div className="space-y-4 px-6 py-6">
-            <div
-              className="rounded-2xl px-4 py-3 text-center text-sm"
-              style={{
-                background: "color-mix(in oklab, var(--olive) 12%, white)",
-                color: "var(--olive-deep)",
-              }}
-            >
-              Merci pour votre confiance. Explorez nos destinations en attendant.
-            </div>
-            <Button
-              className="h-11 w-full rounded-full"
-              onClick={() => handleOpenChange(false)}
-            >
-              Continuer l'exploration
-            </Button>
-          </div>
-        ) : (
-          <Tabs
-            value={tab}
-            onValueChange={(v) => setTab(v as "login" | "register")}
-            className="px-6 py-5"
-          >
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            setTab(v as "login" | "register");
+            setErrorMessage("");
+            setSuccessMessage("");
+          }}
+          className="px-6 py-5"
+        >
             <TabsList className="grid h-11 w-full grid-cols-2 rounded-full bg-muted p-1">
               <TabsTrigger value="login" className="rounded-full text-sm">
                 Se connecter
@@ -214,7 +336,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
             </TabsList>
 
             <TabsContent value="login" className="mt-6 space-y-5">
-              <form onSubmit={simulateSubmit} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4">
                 <Field
                   id="login-email"
                   label="Adresse e-mail"
@@ -266,36 +388,17 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
                     "Se connecter"
                   )}
                 </Button>
+                {successMessage ? (
+                  <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {successMessage}
+                  </p>
+                ) : null}
+                {errorMessage ? (
+                  <p className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {errorMessage}
+                  </p>
+                ) : null}
               </form>
-
-              <div className="relative">
-                <Separator />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-xs text-muted-foreground">
-                  ou
-                </span>
-              </div>
-
-              <Button variant="outline" type="button" className="h-11 w-full rounded-full">
-                <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
-                  <path
-                    fill="currentColor"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  />
-                  <path
-                    fill="currentColor"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  />
-                </svg>
-                Continuer avec Google
-              </Button>
 
               <p className="text-center text-sm text-muted-foreground">
                 Pas encore de compte ?{" "}
@@ -407,6 +510,11 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
                     "Créer mon compte"
                   )}
                 </Button>
+                {errorMessage ? (
+                  <p className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {errorMessage}
+                  </p>
+                ) : null}
               </form>
 
               <p className="text-center text-sm text-muted-foreground">
@@ -421,8 +529,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
                 </button>
               </p>
             </TabsContent>
-          </Tabs>
-        )}
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
