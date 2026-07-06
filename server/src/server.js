@@ -8,6 +8,7 @@ const maisonsRoutes = require("./routes/maisonsRoutes");
 const prospectsRoutes = require("./routes/prospectsRoutes");
 const clientsRoutes = require("./routes/clientsRoutes");
 const hebergementRoutes = require("./routes/hebergementRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const { uploadsDir } = require("./middleware/uploadMiddleware");
 const { testConnection } = require("../database/db");
 const { ensurePasswordResetSchema } = require("../database/passwordResetSchema");
@@ -43,6 +44,7 @@ app.use("/api/maisons", maisonsRoutes);
 app.use("/api/prospects", prospectsRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/hebergement", hebergementRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 async function startServer() {
   try {
@@ -64,6 +66,7 @@ async function startServer() {
     console.log("  - /api/prospects");
     console.log("  - /api/clients");
     console.log("  - /api/hebergement");
+    console.log("  - /api/dashboard");
   });
 }
 

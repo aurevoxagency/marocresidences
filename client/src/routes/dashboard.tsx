@@ -133,17 +133,30 @@ function readSidebarOpen() {
   return localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY) !== "false";
 }
 
+type SidebarNavItem = {
+  id: DashboardView;
+  label: string;
+  icon: LucideIcon;
+  indent?: boolean;
+};
+
+function findSidebarLabel(entries: SidebarNavItem[], view: DashboardView) {
+  return entries.find((item) => item.id === view);
+}
+
 function SidebarItem({
   icon: Icon,
   label,
   active = false,
   compact = false,
+  indent = false,
   onClick,
 }: {
   icon: LucideIcon;
   label: string;
   active?: boolean;
   compact?: boolean;
+  indent?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -152,8 +165,9 @@ function SidebarItem({
       onClick={onClick}
       title={compact ? label : undefined}
       className={[
-        "flex w-full items-center rounded-xl text-left text-[13px] font-medium transition",
-        compact ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
+        "flex w-full items-center rounded-xl text-left font-medium transition",
+        compact ? "justify-center px-2 py-2.5" : "gap-3 py-2.5",
+        compact ? "" : indent ? "pl-8 pr-3 text-[12px]" : "px-3 text-[13px]",
         active
           ? "bg-[#dff4ff] text-[#183b63] shadow-[inset_0_0_0_1px_rgba(126,194,225,0.45)]"
           : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
@@ -161,13 +175,14 @@ function SidebarItem({
     >
       <span
         className={[
-          "grid h-8 w-8 shrink-0 place-items-center rounded-lg border",
+          "grid shrink-0 place-items-center rounded-lg border",
+          indent && !compact ? "h-7 w-7" : "h-8 w-8",
           active
             ? "border-[#b8e1f4] bg-white text-[#3a78b4]"
             : "border-slate-200 bg-white text-slate-400",
         ].join(" ")}
       >
-        <Icon className="h-4 w-4" />
+        <Icon className={indent && !compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
       </span>
       {!compact ? <span className="leading-tight">{label}</span> : null}
     </button>
@@ -207,7 +222,7 @@ function SidebarPanel({
 }: {
   user: AuthUser;
   initials: string;
-  sidebarItems: { id: DashboardView; label: string; icon: LucideIcon }[];
+  sidebarItems: SidebarNavItem[];
   activeView: DashboardView;
   compact?: boolean;
   onNavigate: (view: DashboardView) => void;
@@ -268,6 +283,7 @@ function SidebarPanel({
             label={item.label}
             active={activeView === item.id}
             compact={compact}
+            indent={item.indent}
             onClick={() => onNavigate(item.id)}
           />
         ))}
@@ -318,21 +334,31 @@ function DashboardPage() {
   const canManageGuestHouses = canManageMaisons(user?.role_id);
 
   const sidebarItems = useMemo(() => {
-    const items: { id: DashboardView; label: string; icon: LucideIcon }[] = [
+    const items: SidebarNavItem[] = [
       { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     ];
 
     if (canManageGuestHouses) {
       items.push(
         { id: "maisons", label: "Maisons d'hôtes", icon: Home },
+        { id: "gestion_saisons", label: "Gestion des saisons", icon: CalendarRange, indent: true },
+        { id: "gestion_chambres", label: "Gestion des chambres", icon: BedDouble, indent: true },
+        {
+          id: "gestion_tranches_age",
+          label: "Gestion des tranches d'âge",
+          icon: Baby,
+          indent: true,
+        },
+        {
+          id: "gestion_supplements",
+          label: "Gestion des suppléments",
+          icon: UtensilsCrossed,
+          indent: true,
+        },
         { id: "prospects", label: "Prospects", icon: UserPlus },
         { id: "clients", label: "Clients", icon: Users },
         { id: "reservations", label: "Réservations", icon: CalendarDays },
         { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
-        { id: "gestion_saisons", label: "Gestion des saisons", icon: CalendarRange },
-        { id: "gestion_chambres", label: "Gestion des chambres", icon: BedDouble },
-        { id: "gestion_tranches_age", label: "Gestion des tranches d'âge", icon: Baby },
-        { id: "gestion_supplements", label: "Gestion des suppléments", icon: UtensilsCrossed },
         { id: "promotions", label: "Promotions", icon: BadgePercent },
         { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
         { id: "paiements", label: "Paiements", icon: CreditCard },
@@ -355,7 +381,7 @@ function DashboardPage() {
       return { id: "account" as const, label: "Mon compte", icon: UserRound };
     }
 
-    return sidebarItems.find((item) => item.id === activeView);
+    return findSidebarLabel(sidebarItems, activeView);
   }, [activeView, sidebarItems]);
 
   useEffect(() => {
