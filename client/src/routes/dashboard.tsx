@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BadgePercent,
@@ -18,6 +18,8 @@ import {
   Menu,
   MessageSquareQuote,
   Minimize,
+  PanelLeftClose,
+  PanelLeftOpen,
   Receipt,
   Search,
   UserPlus,
@@ -91,23 +93,60 @@ const PLACEHOLDER_VIEWS = new Set<DashboardView>([
   "avis_clients",
 ]);
 
+const SIDEBAR_WIDTH_STORAGE_KEY = "maroc-dashboard-sidebar-width";
+const SIDEBAR_OPEN_STORAGE_KEY = "maroc-dashboard-sidebar-open";
+const SIDEBAR_DEFAULT_WIDTH = 280;
+const SIDEBAR_MIN_WIDTH = 72;
+const SIDEBAR_MAX_WIDTH = 400;
+const SIDEBAR_COMPACT_THRESHOLD = 200;
+
+function isSidebarCompact(width: number) {
+  return width < SIDEBAR_COMPACT_THRESHOLD;
+}
+
+function readSidebarWidth() {
+  if (typeof window === "undefined") {
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+
+  const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
+
+  if (Number.isFinite(saved) && saved >= SIDEBAR_MIN_WIDTH && saved <= SIDEBAR_MAX_WIDTH) {
+    return saved;
+  }
+
+  return SIDEBAR_DEFAULT_WIDTH;
+}
+
+function readSidebarOpen() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY) !== "false";
+}
+
 function SidebarItem({
   icon: Icon,
   label,
   active = false,
+  compact = false,
   onClick,
 }: {
   icon: LucideIcon;
   label: string;
   active?: boolean;
+  compact?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={compact ? label : undefined}
       className={[
-        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition",
+        "flex w-full items-center rounded-xl text-left text-[13px] font-medium transition",
+        compact ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
         active
           ? "bg-[#dff4ff] text-[#183b63] shadow-[inset_0_0_0_1px_rgba(126,194,225,0.45)]"
           : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
@@ -123,7 +162,7 @@ function SidebarItem({
       >
         <Icon className="h-4 w-4" />
       </span>
-      <span className="leading-tight">{label}</span>
+      {!compact ? <span className="leading-tight">{label}</span> : null}
     </button>
   );
 }
@@ -155,6 +194,7 @@ function SidebarPanel({
   initials,
   sidebarItems,
   activeView,
+  compact = false,
   onNavigate,
   onLogout,
 }: {
@@ -162,57 +202,88 @@ function SidebarPanel({
   initials: string;
   sidebarItems: { id: DashboardView; label: string; icon: LucideIcon }[];
   activeView: DashboardView;
+  compact?: boolean;
   onNavigate: (view: DashboardView) => void;
   onLogout: () => void;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#fbfcff]">
-      <div className="shrink-0 p-4 pb-0 sm:p-5 sm:pb-0">
-        <div className="rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.6)] sm:rounded-[26px]">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#ec4899] text-sm font-semibold text-white sm:h-12 sm:w-12">
+      <div className={compact ? "shrink-0 p-2" : "shrink-0 p-4 pb-0 sm:p-5 sm:pb-0"}>
+        <div
+          className={[
+            "rounded-[22px] border border-slate-200 bg-white shadow-[0_14px_34px_-28px_rgba(15,23,42,0.6)] sm:rounded-[26px]",
+            compact ? "flex justify-center p-2" : "p-4",
+          ].join(" ")}
+        >
+          <div className={compact ? "flex justify-center" : "flex items-center gap-3"}>
+            <div
+              className={[
+                "grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] to-[#ec4899] text-sm font-semibold text-white",
+                compact ? "h-10 w-10" : "h-11 w-11 sm:h-12 sm:w-12",
+              ].join(" ")}
+              title={`${user.first_name} ${user.last_name}`}
+            >
               {initials}
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-[14px] font-semibold text-slate-900">
-                {user.first_name} {user.last_name}
-              </p>
-              <p className="truncate text-[11px] font-medium text-[#7a34c9]">
-                {getRoleLabel(user.role_id)}
-              </p>
-              <p className="truncate text-[11px] text-emerald-500">Connecté</p>
-            </div>
+            {!compact ? (
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-semibold text-slate-900">
+                  {user.first_name} {user.last_name}
+                </p>
+                <p className="truncate text-[11px] font-medium text-[#7a34c9]">
+                  {getRoleLabel(user.role_id)}
+                </p>
+                <p className="truncate text-[11px] text-emerald-500">Connecté</p>
+              </div>
+            ) : null}
           </div>
 
-          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
-            <Search className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className="truncate text-[12px] text-slate-400">Maroc Résidences</span>
-            <Bell className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
-          </div>
+          {!compact ? (
+            <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
+              <Search className="h-4 w-4 shrink-0 text-slate-400" />
+              <span className="truncate text-[12px] text-slate-400">Maroc Résidences</span>
+              <Bell className="ml-auto h-4 w-4 shrink-0 text-slate-400" />
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+      <nav
+        className={[
+          "min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain py-4",
+          compact ? "px-2" : "px-4 sm:px-5",
+        ].join(" ")}
+      >
         {sidebarItems.map((item) => (
           <SidebarItem
             key={item.id}
             icon={item.icon}
             label={item.label}
             active={activeView === item.id}
+            compact={compact}
             onClick={() => onNavigate(item.id)}
           />
         ))}
       </nav>
 
-      <div className="shrink-0 border-t border-slate-200 bg-[#fbfcff] p-4 pt-4 sm:p-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+      <div
+        className={[
+          "shrink-0 border-t border-slate-200 bg-[#fbfcff]",
+          compact ? "p-2" : "p-4 pt-4 sm:p-5",
+        ].join(" ")}
+      >
+        <div className={compact ? "" : "rounded-2xl border border-slate-200 bg-white p-3 sm:p-4"}>
           <Button
             variant="outline"
-            className="w-full justify-center rounded-xl border-slate-200 bg-white py-5 text-[13px] font-semibold"
+            title="Déconnexion"
+            className={[
+              "justify-center rounded-xl border-slate-200 bg-white text-[13px] font-semibold",
+              compact ? "h-10 w-full px-0" : "w-full py-5",
+            ].join(" ")}
             onClick={onLogout}
           >
             <LogOut className="h-4 w-4" />
-            Déconnexion
+            {!compact ? "Déconnexion" : null}
           </Button>
         </div>
       </div>
@@ -226,6 +297,11 @@ function DashboardPage() {
   const [activeView, setActiveView] = useState<DashboardView>("dashboard");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen);
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  const sidebarCompact = isSidebarCompact(sidebarWidth);
 
   const initials = user
     ? `${user.first_name?.[0] || ""}${user.last_name?.[0] || ""}`.toUpperCase()
@@ -310,6 +386,41 @@ function DashboardPage() {
   }, [navigate]);
 
   useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!isResizingSidebar) {
+      return;
+    }
+
+    const onMouseMove = (event: MouseEvent) => {
+      const nextWidth = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, event.clientX)
+      );
+      setSidebarWidth(nextWidth);
+    };
+
+    const onMouseUp = () => {
+      setIsResizingSidebar(false);
+      localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidthRef.current));
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizingSidebar]);
+
+  useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -353,6 +464,18 @@ function DashboardPage() {
   const handleNavigate = (view: DashboardView) => {
     setActiveView(view);
     setMobileMenuOpen(false);
+  };
+
+  const toggleSidebar = () => {
+    setSidebarOpen((current) => {
+      const next = !current;
+      localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
+
+  const startSidebarResize = () => {
+    setIsResizingSidebar(true);
   };
 
   const accountMenu = (
@@ -399,6 +522,76 @@ function DashboardPage() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+
+  const renderMainContent = (showSidebarToggle = false) => (
+    <>
+      <div className="hidden shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-[#fcfcfe] px-6 py-4 lg:flex">
+        <div className="flex min-w-0 items-center gap-3">
+          {showSidebarToggle ? (
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+              aria-label={sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              title={sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" />
+              )}
+            </button>
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium text-slate-400">Espace pro</p>
+            <h1 className="truncate text-[18px] font-semibold text-slate-900">
+              {activeItem?.label || "Tableau de bord"}
+            </h1>
+          </div>
+        </div>
+        {accountMenu}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 lg:p-7">
+        {activeView === "dashboard" ? (
+          <DashboardOverview
+            canManageMaisons={canManageGuestHouses}
+            isAdmin={isAdmin}
+          />
+        ) : null}
+
+        {activeView === "maisons" && canManageGuestHouses ? (
+          <MaisonsManagement />
+        ) : null}
+
+        {activeView === "prospects" && canManageGuestHouses ? (
+          <ProspectsManagement />
+        ) : null}
+
+        {activeView === "clients" && canManageGuestHouses ? (
+          <ClientsManagement />
+        ) : null}
+
+        {activeView === "users" && isAdmin ? (
+          <UsersManagement currentUserId={user.id} />
+        ) : null}
+
+        {activeView === "account" ? (
+          <AccountSettings user={user} onUserUpdated={setUser} />
+        ) : null}
+
+        {PLACEHOLDER_VIEWS.has(activeView) &&
+        canManageGuestHouses &&
+        activeItem &&
+        activeItem.id !== "account" ? (
+          <PlaceholderModule
+            title={activeItem.label}
+            description={`Espace dédié à la gestion de « ${activeItem.label.toLowerCase()} ».`}
+          />
+        ) : null}
+      </div>
+    </>
   );
 
   return (
@@ -460,89 +653,71 @@ function DashboardPage() {
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Desktop sidebar */}
-          <aside className="hidden h-full w-[280px] shrink-0 min-h-0 border-r border-slate-200 lg:block">
-            <SidebarPanel
-              user={user}
-              initials={initials}
-              sidebarItems={sidebarItems}
-              activeView={activeView}
-              onNavigate={handleNavigate}
-              onLogout={() => void handleLogout()}
-            />
-          </aside>
-
-          {/* Mobile drawer */}
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetContent
-              side="left"
-              className="flex w-[min(100%,320px)] flex-col border-r border-slate-200 bg-[#fbfcff] p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:z-10"
-            >
-              <SheetHeader className="sr-only">
-                <SheetTitle>Menu de navigation</SheetTitle>
-              </SheetHeader>
-              <div className="min-h-0 flex-1 pt-10">
-                <SidebarPanel
-                  user={user}
-                  initials={initials}
-                  sidebarItems={sidebarItems}
-                  activeView={activeView}
-                  onNavigate={handleNavigate}
-                  onLogout={() => void handleLogout()}
+          <div className="hidden min-h-0 flex-1 overflow-hidden lg:flex">
+            {sidebarOpen ? (
+              <>
+                <aside
+                  style={{ width: sidebarWidth }}
+                  className="h-full min-h-0 shrink-0 overflow-hidden border-r border-slate-200"
+                >
+                  <SidebarPanel
+                    user={user}
+                    initials={initials}
+                    sidebarItems={sidebarItems}
+                    activeView={activeView}
+                    compact={sidebarCompact}
+                    onNavigate={handleNavigate}
+                    onLogout={() => void handleLogout()}
+                  />
+                </aside>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Redimensionner le menu"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    startSidebarResize();
+                  }}
+                  className={[
+                    "relative z-10 w-1.5 shrink-0 cursor-col-resize border-r border-slate-200 bg-[#f8fafc] transition-colors hover:bg-slate-200",
+                    isResizingSidebar ? "bg-slate-300" : "",
+                  ].join(" ")}
                 />
-              </div>
-            </SheetContent>
-          </Sheet>
+              </>
+            ) : null}
 
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#fcfcfe]">
-            <div className="hidden shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-[#fcfcfe] px-6 py-4 lg:flex">
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium text-slate-400">Espace pro</p>
-                <h1 className="truncate text-[18px] font-semibold text-slate-900">
-                  {activeItem?.label || "Tableau de bord"}
-                </h1>
-              </div>
-              {accountMenu}
-            </div>
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#fcfcfe]">
+              {renderMainContent(true)}
+            </section>
+          </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 lg:p-7">
-              {activeView === "dashboard" ? (
-                <DashboardOverview
-                  canManageMaisons={canManageGuestHouses}
-                  isAdmin={isAdmin}
-                />
-              ) : null}
+          {/* Mobile drawer + content */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:hidden">
+            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+              <SheetContent
+                side="left"
+                className="flex w-[min(100%,320px)] flex-col border-r border-slate-200 bg-[#fbfcff] p-0 [&>button]:right-3 [&>button]:top-3 [&>button]:z-10"
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Menu de navigation</SheetTitle>
+                </SheetHeader>
+                <div className="min-h-0 flex-1 pt-10">
+                  <SidebarPanel
+                    user={user}
+                    initials={initials}
+                    sidebarItems={sidebarItems}
+                    activeView={activeView}
+                    onNavigate={handleNavigate}
+                    onLogout={() => void handleLogout()}
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
 
-              {activeView === "maisons" && canManageGuestHouses ? (
-                <MaisonsManagement />
-              ) : null}
-
-              {activeView === "prospects" && canManageGuestHouses ? (
-                <ProspectsManagement />
-              ) : null}
-
-              {activeView === "clients" && canManageGuestHouses ? (
-                <ClientsManagement />
-              ) : null}
-
-              {activeView === "users" && isAdmin ? (
-                <UsersManagement currentUserId={user.id} />
-              ) : null}
-
-              {activeView === "account" ? (
-                <AccountSettings user={user} onUserUpdated={setUser} />
-              ) : null}
-
-              {PLACEHOLDER_VIEWS.has(activeView) &&
-              canManageGuestHouses &&
-              activeItem &&
-              activeItem.id !== "account" ? (
-                <PlaceholderModule
-                  title={activeItem.label}
-                  description={`Espace dédié à la gestion de « ${activeItem.label.toLowerCase()} ».`}
-                />
-              ) : null}
-            </div>
-          </section>
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#fcfcfe]">
+              {renderMainContent()}
+            </section>
+          </div>
         </div>
       </div>
     </main>
