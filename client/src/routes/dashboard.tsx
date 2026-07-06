@@ -402,22 +402,10 @@ function DashboardPage() {
   );
 
   return (
-    <main
-      className={[
-        "bg-white text-slate-900",
-        isFullscreen
-          ? "flex h-[100dvh] flex-col overflow-hidden p-0"
-          : "flex min-h-[100dvh] flex-col overflow-hidden p-0",
-      ].join(" ")}
-    >
-      <div
-        className={[
-          "flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden border-slate-200 bg-white",
-          isFullscreen ? "h-full rounded-none border-0" : "min-h-[100dvh] h-[100dvh] rounded-none border-0",
-        ].join(" ")}
-      >
+    <main className="flex h-[100dvh] flex-col overflow-hidden bg-white p-0 text-slate-900">
+      <div className="flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-white">
         {/* Desktop chrome bar */}
-        <div className="hidden items-center gap-4 border-b border-slate-200 bg-[#fbfbfe] px-6 py-3 lg:flex">
+        <div className="hidden shrink-0 items-center gap-4 border-b border-slate-200 bg-[#fbfbfe] px-6 py-3 lg:flex">
           <div className="flex items-center gap-2">
             <span className="h-3 w-3 rounded-full bg-[#ff605c]" />
             <span className="h-3 w-3 rounded-full bg-[#ffbd44]" />
@@ -439,7 +427,7 @@ function DashboardPage() {
         </div>
 
         {/* Mobile top bar */}
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-3 sm:px-4 lg:hidden">
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-3 sm:px-4 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
@@ -470,9 +458,9 @@ function DashboardPage() {
           {accountMenu}
         </div>
 
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[280px_1fr]">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Desktop sidebar */}
-          <aside className="hidden h-full min-h-0 border-r border-slate-200 lg:block">
+          <aside className="hidden h-full w-[280px] shrink-0 min-h-0 border-r border-slate-200 lg:block">
             <SidebarPanel
               user={user}
               initials={initials}
@@ -505,8 +493,8 @@ function DashboardPage() {
             </SheetContent>
           </Sheet>
 
-          <section className="flex min-h-0 flex-col overflow-hidden bg-[#fcfcfe]">
-            <div className="hidden items-center justify-between gap-4 border-b border-slate-100 bg-[#fcfcfe] px-6 py-4 lg:flex">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#fcfcfe]">
+            <div className="hidden shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-[#fcfcfe] px-6 py-4 lg:flex">
               <div className="min-w-0">
                 <p className="text-[12px] font-medium text-slate-400">Espace pro</p>
                 <h1 className="truncate text-[18px] font-semibold text-slate-900">
