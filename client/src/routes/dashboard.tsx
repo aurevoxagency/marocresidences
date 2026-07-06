@@ -404,19 +404,16 @@ function DashboardPage() {
   return (
     <main
       className={[
-        "bg-[#f4f6fb] text-slate-900",
+        "bg-white text-slate-900",
         isFullscreen
           ? "flex h-[100dvh] flex-col overflow-hidden p-0"
-          : "min-h-[100dvh] p-0 sm:px-4 sm:py-4 lg:px-5",
+          : "flex min-h-[100dvh] flex-col overflow-hidden p-0",
       ].join(" ")}
     >
       <div
         className={[
-          "mx-auto flex min-h-0 w-full flex-col overflow-hidden border-slate-200 bg-white shadow-[0_30px_80px_-45px_rgba(15,23,42,0.42)]",
-          isFullscreen
-            ? "h-full max-w-none flex-1 rounded-none border-0"
-            : "min-h-[100dvh] border-0 sm:min-h-0 sm:max-w-[1460px] sm:rounded-[28px] sm:border",
-          !isFullscreen ? "sm:h-[calc(100dvh-2rem)]" : "",
+          "flex min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden border-slate-200 bg-white",
+          isFullscreen ? "h-full rounded-none border-0" : "min-h-[100dvh] h-[100dvh] rounded-none border-0",
         ].join(" ")}
       >
         {/* Desktop chrome bar */}
