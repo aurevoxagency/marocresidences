@@ -96,3 +96,43 @@ export async function fetchCurrentUser(token: string) {
 
   return data.user;
 }
+
+export async function requestPasswordReset(email: string) {
+  const response = await fetch(`${getApiBaseUrl()}/users/forgot-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as {
+    message?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(data.message || "Impossible d'envoyer le lien de réinitialisation.");
+  }
+
+  return data.message || "Si un compte existe avec cette adresse e-mail, un lien de réinitialisation vient d'être envoyé.";
+}
+
+export async function resetPassword(token: string, password: string) {
+  const response = await fetch(`${getApiBaseUrl()}/users/reset-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token, password }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as {
+    message?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(data.message || "Impossible de réinitialiser le mot de passe.");
+  }
+
+  return data.message || "Votre mot de passe a été réinitialisé avec succès.";
+}

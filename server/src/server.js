@@ -7,8 +7,11 @@ const usersRoutes = require("./routes/usersRoutes");
 const maisonsRoutes = require("./routes/maisonsRoutes");
 const prospectsRoutes = require("./routes/prospectsRoutes");
 const clientsRoutes = require("./routes/clientsRoutes");
+const hebergementRoutes = require("./routes/hebergementRoutes");
 const { uploadsDir } = require("./middleware/uploadMiddleware");
 const { testConnection } = require("../database/db");
+const { ensurePasswordResetSchema } = require("../database/passwordResetSchema");
+const { ensureHebergementCatalogues } = require("../database/hebergementCatalogSchema");
 
 dotenv.config();
 
@@ -39,23 +42,29 @@ app.use("/api/users", usersRoutes);
 app.use("/api/maisons", maisonsRoutes);
 app.use("/api/prospects", prospectsRoutes);
 app.use("/api/clients", clientsRoutes);
+app.use("/api/hebergement", hebergementRoutes);
 
 async function startServer() {
   try {
     await testConnection();
-
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log("[SERVER] Routes actives:");
-      console.log("  - /api/users");
-      console.log("  - /api/maisons");
-      console.log("  - /api/prospects");
-      console.log("  - /api/clients");
-    });
   } catch (error) {
     console.error("Unable to connect to MySQL:", error.message);
     process.exit(1);
+    return;
   }
+
+  await ensurePasswordResetSchema();
+  await ensureHebergementCatalogues();
+
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log("[SERVER] Routes actives:");
+    console.log("  - /api/users");
+    console.log("  - /api/maisons");
+    console.log("  - /api/prospects");
+    console.log("  - /api/clients");
+    console.log("  - /api/hebergement");
+  });
 }
 
 startServer();

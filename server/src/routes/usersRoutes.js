@@ -10,6 +10,8 @@ const {
   updateCurrentUser,
   updateUser,
   deleteUser,
+  requestPasswordReset,
+  resetPassword,
 } = require("../controllers/usersController");
 const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
 
@@ -18,6 +20,8 @@ const adminOnly = [requireAuth, requireAdmin];
 
 router.post("/register", registerClientUser);
 router.post("/login", loginUser);
+router.post("/forgot-password", requestPasswordReset);
+router.post("/reset-password", resetPassword);
 router.get("/me", requireAuth, getCurrentUser);
 router.put("/me", requireAuth, updateCurrentUser);
 

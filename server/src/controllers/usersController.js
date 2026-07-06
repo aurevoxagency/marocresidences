@@ -1,9 +1,14 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 
 const { pool } = require("../../database/db");
+const { sendPasswordResetEmail } = require("../services/emailService");
 
 const CLIENT_ROLE_ID = 3;
+const PASSWORD_RESET_EXPIRY_HOURS = 1;
+const GENERIC_RESET_MESSAGE =
+  "Si un compte existe avec cette adresse e-mail, un lien de réinitialisation vient d'être envoyé.";
 
 const PUBLIC_USER_FIELDS = `
   id,
@@ -386,6 +391,132 @@ async function deleteUser(req, res) {
   }
 }
 
+function getClientAppUrl() {
+  return (
+    process.env.CLIENT_URL ||
+    process.env.APP_URL ||
+    "http://localhost:5173"
+  ).replace(/\/$/, "");
+}
+
+async function requestPasswordReset(req, res) {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        message: "L'adresse e-mail est requise.",
+      });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const [users] = await pool.query(
+      "SELECT id, first_name, email FROM users WHERE email = ? LIMIT 1",
+      [normalizedEmail]
+    );
+
+    if (users.length > 0) {
+      const user = users[0];
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+      await pool.query(
+        "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL",
+        [user.id]
+      );
+
+      await pool.query(
+        `
+          INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+          VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? HOUR))
+        `,
+        [user.id, tokenHash, PASSWORD_RESET_EXPIRY_HOURS]
+      );
+
+      const resetUrl = `${getClientAppUrl()}/reset-password?token=${rawToken}`;
+
+      await sendPasswordResetEmail({
+        to: user.email,
+        resetUrl,
+        firstName: user.first_name,
+      });
+    }
+
+    return res.status(200).json({
+      message: GENERIC_RESET_MESSAGE,
+    });
+  } catch (error) {
+    console.error("Error requesting password reset:", error);
+    return res.status(500).json({
+      message: "Impossible d'envoyer le lien de réinitialisation.",
+    });
+  }
+}
+
+async function resetPassword(req, res) {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        message: "Le lien et le nouveau mot de passe sont requis.",
+      });
+    }
+
+    if (String(password).length < 8) {
+      return res.status(400).json({
+        message: "Le mot de passe doit contenir au moins 8 caractères.",
+      });
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(String(token)).digest("hex");
+
+    const [tokens] = await pool.query(
+      `
+        SELECT id, user_id
+        FROM password_reset_tokens
+        WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW()
+        LIMIT 1
+      `,
+      [tokenHash]
+    );
+
+    const matchedToken = tokens[0];
+
+    if (!matchedToken) {
+      return res.status(400).json({
+        message: "Ce lien de réinitialisation est invalide ou expiré.",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await pool.query("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?", [
+      passwordHash,
+      matchedToken.user_id,
+    ]);
+
+    await pool.query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = ?", [
+      matchedToken.id,
+    ]);
+
+    await pool.query(
+      "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL",
+      [matchedToken.user_id]
+    );
+
+    return res.status(200).json({
+      message: "Votre mot de passe a été réinitialisé avec succès.",
+    });
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    return res.status(500).json({
+      message: "Impossible de réinitialiser le mot de passe.",
+    });
+  }
+}
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -396,4 +527,6 @@ module.exports = {
   updateCurrentUser,
   updateUser,
   deleteUser,
+  requestPasswordReset,
+  resetPassword,
 };

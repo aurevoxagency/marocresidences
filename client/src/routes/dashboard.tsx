@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  Baby,
   BadgePercent,
   Bell,
   BriefcaseBusiness,
@@ -20,6 +21,8 @@ import {
   Minimize,
   PanelLeftClose,
   PanelLeftOpen,
+  BedDouble,
+  UtensilsCrossed,
   Receipt,
   Search,
   UserPlus,
@@ -32,6 +35,7 @@ import {
 import { AccountSettings } from "@/components/account-settings";
 import { ClientsManagement } from "@/components/clients-management";
 import { DashboardOverview } from "@/components/dashboard-overview";
+import { HebergementManagement } from "@/components/hebergement-management";
 import { MaisonsManagement } from "@/components/maisons-management";
 import { ProspectsManagement } from "@/components/prospects-management";
 import { Button } from "@/components/ui/button";
@@ -49,6 +53,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { TranchesAgeManagement } from "@/components/tranches-age-management";
 import { UsersManagement } from "@/components/users-management";
 import {
   clearAuthToken,
@@ -69,7 +74,10 @@ type DashboardView =
   | "clients"
   | "reservations"
   | "gestion_commerciale"
-  | "gestion_saison"
+  | "gestion_saisons"
+  | "gestion_chambres"
+  | "gestion_supplements"
+  | "gestion_tranches_age"
   | "promotions"
   | "gestion_financiere"
   | "paiements"
@@ -83,7 +91,6 @@ type DashboardView =
 const PLACEHOLDER_VIEWS = new Set<DashboardView>([
   "reservations",
   "gestion_commerciale",
-  "gestion_saison",
   "promotions",
   "gestion_financiere",
   "paiements",
@@ -322,7 +329,10 @@ function DashboardPage() {
         { id: "clients", label: "Clients", icon: Users },
         { id: "reservations", label: "Réservations", icon: CalendarDays },
         { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
-        { id: "gestion_saison", label: "Gestion saison", icon: CalendarRange },
+        { id: "gestion_saisons", label: "Gestion des saisons", icon: CalendarRange },
+        { id: "gestion_chambres", label: "Gestion des chambres", icon: BedDouble },
+        { id: "gestion_tranches_age", label: "Gestion des tranches d'âge", icon: Baby },
+        { id: "gestion_supplements", label: "Gestion des suppléments", icon: UtensilsCrossed },
         { id: "promotions", label: "Promotions", icon: BadgePercent },
         { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
         { id: "paiements", label: "Paiements", icon: CreditCard },
@@ -571,6 +581,22 @@ function DashboardPage() {
 
         {activeView === "clients" && canManageGuestHouses ? (
           <ClientsManagement />
+        ) : null}
+
+        {activeView === "gestion_saisons" && canManageGuestHouses ? (
+          <HebergementManagement defaultTab="saisons" singleTab />
+        ) : null}
+
+        {activeView === "gestion_chambres" && canManageGuestHouses ? (
+          <HebergementManagement defaultTab="chambres" singleTab />
+        ) : null}
+
+        {activeView === "gestion_supplements" && canManageGuestHouses ? (
+          <HebergementManagement defaultTab="supplements" singleTab />
+        ) : null}
+
+        {activeView === "gestion_tranches_age" && canManageGuestHouses ? (
+          <TranchesAgeManagement />
         ) : null}
 
         {activeView === "users" && isAdmin ? (

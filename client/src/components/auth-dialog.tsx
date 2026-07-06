@@ -15,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getApiBaseUrl, saveAuthToken, type AuthUser } from "@/lib/auth";
+import { getApiBaseUrl, requestPasswordReset, saveAuthToken, type AuthUser } from "@/lib/auth";
 
 function logClientAuth(scope: string, data?: unknown) {
   console.log(`[CLIENT AUTH] ${scope}`, data ?? "");
@@ -30,6 +30,8 @@ type AuthDialogProps = {
   onOpenChange: (open: boolean) => void;
   defaultTab?: "login" | "register";
 };
+
+type AuthView = "login" | "register" | "forgot";
 
 type AuthResponse = {
   message?: string;
@@ -123,6 +125,7 @@ function Field({
 
 export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDialogProps) {
   const navigate = useNavigate();
+  const [view, setView] = useState<AuthView>(defaultTab);
   const [tab, setTab] = useState(defaultTab);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -131,6 +134,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [remember, setRemember] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -151,6 +155,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
   useEffect(() => {
     if (open) {
       setTab(defaultTab);
+      setView(defaultTab);
       setErrorMessage("");
       setSuccessMessage("");
     }
@@ -225,6 +230,24 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
     } catch (error) {
       logClientAuthError("Login failed", error);
       setErrorMessage(error instanceof Error ? error.message : "Connexion impossible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setSuccessMessage("");
+    setLoading(true);
+
+    try {
+      const message = await requestPasswordReset(forgotEmail);
+      setSuccessMessage(message);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Impossible d'envoyer le lien de réinitialisation."
+      );
     } finally {
       setLoading(false);
     }
@@ -320,12 +343,15 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
         <Tabs
           value={tab}
           onValueChange={(v) => {
-            setTab(v as "login" | "register");
+            const nextTab = v as "login" | "register";
+            setTab(nextTab);
+            setView(nextTab);
             setErrorMessage("");
             setSuccessMessage("");
           }}
           className="px-6 py-5"
         >
+            {view !== "forgot" ? (
             <TabsList className="grid h-11 w-full grid-cols-2 rounded-full bg-muted p-1">
               <TabsTrigger value="login" className="rounded-full text-sm">
                 Se connecter
@@ -334,8 +360,76 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
                 S'inscrire
               </TabsTrigger>
             </TabsList>
+            ) : null}
 
-            <TabsContent value="login" className="mt-6 space-y-5">
+            {view === "forgot" ? (
+              <div className="mt-6 space-y-5">
+                <div className="space-y-1.5 text-center">
+                  <h2 className="text-lg font-semibold text-foreground">Mot de passe oublié</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Saisissez votre adresse e-mail pour recevoir un lien de réinitialisation.
+                  </p>
+                </div>
+
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <Field
+                    id="forgot-email"
+                    label="Adresse e-mail"
+                    type="email"
+                    value={forgotEmail}
+                    onChange={setForgotEmail}
+                    placeholder="vous@exemple.com"
+                    icon={Mail}
+                    autoComplete="email"
+                  />
+
+                  <Button
+                    type="submit"
+                    disabled={loading || !forgotEmail}
+                    className="h-11 w-full rounded-full text-base font-semibold"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Envoi en cours…
+                      </>
+                    ) : (
+                      "Envoyer le lien"
+                    )}
+                  </Button>
+
+                  {successMessage ? (
+                    <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                      {successMessage}
+                    </p>
+                  ) : null}
+                  {errorMessage ? (
+                    <p className="rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                      {errorMessage}
+                    </p>
+                  ) : null}
+                </form>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView("login");
+                      setTab("login");
+                      setErrorMessage("");
+                      setSuccessMessage("");
+                      setForgotEmail(loginEmail);
+                    }}
+                    className="font-medium transition hover:underline"
+                    style={{ color: "var(--terracotta)" }}
+                  >
+                    Retour à la connexion
+                  </button>
+                </p>
+              </div>
+            ) : null}
+
+            <TabsContent value="login" className={view === "forgot" ? "hidden" : "mt-6 space-y-5"}>
               <form onSubmit={handleLogin} className="space-y-4">
                 <Field
                   id="login-email"
@@ -367,6 +461,12 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
                   </label>
                   <button
                     type="button"
+                    onClick={() => {
+                      setForgotEmail(loginEmail);
+                      setView("forgot");
+                      setErrorMessage("");
+                      setSuccessMessage("");
+                    }}
                     className="text-sm font-medium transition hover:underline"
                     style={{ color: "var(--terracotta)" }}
                   >
@@ -413,7 +513,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
               </p>
             </TabsContent>
 
-            <TabsContent value="register" className="mt-6 space-y-5">
+            <TabsContent value="register" className={view === "forgot" ? "hidden" : "mt-6 space-y-5"}>
               <form onSubmit={handleRegister} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <Field
