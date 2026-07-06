@@ -37,6 +37,7 @@ import { ClientsManagement } from "@/components/clients-management";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { HebergementManagement } from "@/components/hebergement-management";
 import { MaisonsManagement } from "@/components/maisons-management";
+import { PromotionsManagement } from "@/components/promotions-management";
 import { ProspectsManagement } from "@/components/prospects-management";
 import { Button } from "@/components/ui/button";
 import {
@@ -91,7 +92,6 @@ type DashboardView =
 const PLACEHOLDER_VIEWS = new Set<DashboardView>([
   "reservations",
   "gestion_commerciale",
-  "promotions",
   "gestion_financiere",
   "paiements",
   "facturation",
@@ -607,6 +607,10 @@ function DashboardPage() {
 
         {activeView === "clients" && canManageGuestHouses ? (
           <ClientsManagement />
+        ) : null}
+
+        {activeView === "promotions" && canManageGuestHouses ? (
+          <PromotionsManagement />
         ) : null}
 
         {activeView === "gestion_saisons" && canManageGuestHouses ? (

@@ -63,6 +63,7 @@ import {
   updateSupplementTarifs,
   type ChambreDetail,
   type ChambreListItem,
+  type ChambrePromotion,
   type HebergementReferences,
   type Saison,
   type SupplementTarifRow,
@@ -241,6 +242,99 @@ function TarifsEditor<T extends TarifChambre>({
   );
 }
 
+function formatTarifPrice(value?: number | null) {
+  if (value == null || Number.isNaN(value)) {
+    return "—";
+  }
+
+  return `${value} MAD`;
+}
+
+function shortTrancheLabel(name: string) {
+  return name.replace(/^enfant\s+/i, "").trim() || name;
+}
+
+function applyPromotionDiscount(price: number, promotion: ChambrePromotion) {
+  if (promotion.type_reduction === "pourcentage") {
+    return Math.max(0, Math.round(price * (1 - promotion.valeur_reduction / 100) * 100) / 100);
+  }
+
+  return Math.max(0, Math.round((price - promotion.valeur_reduction) * 100) / 100);
+}
+
+function promotionLabel(promotion: ChambrePromotion) {
+  if (promotion.type_reduction === "pourcentage") {
+    return `-${promotion.valeur_reduction}%`;
+  }
+
+  return `-${promotion.valeur_reduction} MAD`;
+}
+
+function PromoPrice({
+  value,
+  promotion,
+}: {
+  value?: number | null;
+  promotion?: ChambrePromotion | null;
+}) {
+  if (value == null || Number.isNaN(value)) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  if (!promotion) {
+    return <span className="tabular-nums">{formatTarifPrice(value)}</span>;
+  }
+
+  const discounted = applyPromotionDiscount(value, promotion);
+
+  return (
+    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap tabular-nums">
+      <span className="text-[11px] text-slate-400 line-through decoration-slate-300">
+        {value}
+      </span>
+      <span className="font-medium text-slate-900">{discounted} MAD</span>
+    </span>
+  );
+}
+
+function EnfantPricesCell({ chambre }: { chambre: ChambreListItem }) {
+  const bebeTranche = getBebeTranche(chambre);
+  const autresEnfants = (chambre.tarifs_enfant || []).filter(
+    (tarif) => tarif !== bebeTranche
+  );
+  const promotion = chambre.promotion;
+
+  if (autresEnfants.length === 0) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  if (autresEnfants.length === 1) {
+    return <PromoPrice value={autresEnfants[0].prix} promotion={promotion} />;
+  }
+
+  return (
+    <div className="space-y-1">
+      {autresEnfants.map((tarif) => (
+        <div key={tarif.tranche_age_id} className="flex items-baseline gap-2">
+          <span
+            className="w-[4.5rem] shrink-0 truncate text-[11px] text-slate-500"
+            title={tarif.tranche_nom}
+          >
+            {shortTrancheLabel(tarif.tranche_nom)}
+          </span>
+          <PromoPrice value={tarif.prix} promotion={promotion} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getBebeTranche(chambre: ChambreListItem) {
+  return (chambre.tarifs_enfant || []).find(
+    (tarif) => /b[eé]b[eé]/i.test(tarif.tranche_nom) || tarif.age_max <= 2
+  );
+}
+
 export type HebergementTab = "saisons" | "chambres" | "supplements";
 
 const TAB_COPY: Record<
@@ -294,6 +388,7 @@ export function HebergementManagement({
   const [supplementDialogOpen, setSupplementDialogOpen] = useState(false);
   const [editingSupplement, setEditingSupplement] = useState<SupplementTarifRow | null>(null);
   const [supplementTarifs, setSupplementTarifs] = useState<TarifSupplement[]>([]);
+  const [tarifSaisonId, setTarifSaisonId] = useState("");
   const [activeTab, setActiveTab] = useState<HebergementTab>(defaultTab);
 
   useEffect(() => {
@@ -316,16 +411,17 @@ export function HebergementManagement({
     }
 
     const id = Number(maisonId);
+    const saisonIdForTarifs = tarifSaisonId ? Number(tarifSaisonId) : undefined;
     const [nextSaisons, nextChambres, supplementData] = await Promise.all([
       fetchSaisons(id),
-      fetchChambres(id),
+      fetchChambres(id, saisonIdForTarifs),
       fetchSupplementTarifs(id),
     ]);
 
     setSaisons(nextSaisons);
     setChambres(nextChambres);
     setSupplements(supplementData.supplements);
-  }, [maisonId]);
+  }, [maisonId, tarifSaisonId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -396,6 +492,26 @@ export function HebergementManagement({
       setErrorMessage(error instanceof Error ? error.message : "Chargement impossible.");
     });
   }, [loadData, loadingMaisons, maisonId]);
+
+  useEffect(() => {
+    if (saisons.length === 0) {
+      setTarifSaisonId("");
+      return;
+    }
+
+    setTarifSaisonId((current) => {
+      if (current && saisons.some((saison) => String(saison.id) === current)) {
+        return current;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const currentSaison = saisons.find(
+        (saison) => saison.date_debut <= today && saison.date_fin >= today
+      );
+
+      return String((currentSaison || saisons[0]).id);
+    });
+  }, [saisons]);
 
   const openCreateSaison = () => {
     setEditingSaison(null);
@@ -663,7 +779,33 @@ export function HebergementManagement({
           </TabsContent>
 
           <TabsContent value="chambres" className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="w-full lg:max-w-xs">
+                <Label>Tarifs pour la saison</Label>
+                <Select
+                  value={tarifSaisonId || undefined}
+                  onValueChange={setTarifSaisonId}
+                  disabled={saisons.length === 0}
+                >
+                  <SelectTrigger className="mt-2 h-11 rounded-xl">
+                    <SelectValue
+                      placeholder={
+                        saisons.length === 0
+                          ? "Aucune saison définie"
+                          : "Sélectionner une saison"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="z-[200]">
+                    {saisons.map((saison) => (
+                      <SelectItem key={saison.id} value={String(saison.id)}>
+                        {saison.nom}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button onClick={openCreateChambre} className="rounded-full">
                 <Plus className="h-4 w-4" />
                 Nouvelle chambre
@@ -679,6 +821,9 @@ export function HebergementManagement({
                     <TableHead>Type</TableHead>
                     <TableHead>Allotement</TableHead>
                     <TableHead>Capacité</TableHead>
+                    <TableHead>Prix adulte</TableHead>
+                    <TableHead>Prix bébé</TableHead>
+                    <TableHead>Prix enfant</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead className="w-12" />
                   </TableRow>
@@ -686,18 +831,49 @@ export function HebergementManagement({
                 <TableBody>
                   {chambres.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="py-8 text-center text-slate-500">
+                      <TableCell colSpan={10} className="py-8 text-center text-slate-500">
                         Aucune chambre configurée.
                       </TableCell>
                     </TableRow>
                   ) : (
                     chambres.map((chambre) => (
                       <TableRow key={chambre.id}>
-                        <TableCell className="font-medium">{chambre.nom}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{chambre.nom}</span>
+                            {chambre.has_promotion && chambre.promotion ? (
+                              <span
+                                className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-amber-800 ring-1 ring-inset ring-amber-200/80"
+                                title={
+                                  chambre.nb_promotions && chambre.nb_promotions > 1
+                                    ? `${chambre.nb_promotions} promotions · ${chambre.promotion.nom}`
+                                    : chambre.promotion.nom
+                                }
+                              >
+                                {promotionLabel(chambre.promotion)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
                         <TableCell>{chambre.categorie_nom}</TableCell>
                         <TableCell>{chambre.type_nom}</TableCell>
                         <TableCell>{chambre.allotement}</TableCell>
                         <TableCell>{chambre.capacite_max}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <PromoPrice
+                            value={chambre.prix_adulte}
+                            promotion={chambre.promotion}
+                          />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <PromoPrice
+                            value={chambre.prix_bebe ?? getBebeTranche(chambre)?.prix ?? null}
+                            promotion={chambre.promotion}
+                          />
+                        </TableCell>
+                        <TableCell className="min-w-[140px]">
+                          <EnfantPricesCell chambre={chambre} />
+                        </TableCell>
                         <TableCell className="capitalize">{chambre.statut}</TableCell>
                         <TableCell>
                           <DropdownMenu>

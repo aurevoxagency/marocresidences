@@ -51,6 +51,21 @@ export type TarifSupplement = TarifChambre & {
   prix_bebe: number;
 };
 
+export type ChambreTarifEnfantListItem = {
+  tranche_age_id: number;
+  tranche_nom: string;
+  age_min: number;
+  age_max: number;
+  prix: number;
+};
+
+export type ChambrePromotion = {
+  id: number;
+  nom: string;
+  type_reduction: "pourcentage" | "valeur";
+  valeur_reduction: number;
+};
+
 export type ChambreListItem = {
   id: number;
   maison_id: number;
@@ -64,6 +79,13 @@ export type ChambreListItem = {
   statut: "actif" | "inactif";
   categorie_nom: string;
   type_nom: string;
+  prix_adulte?: number | null;
+  prix_bebe?: number | null;
+  prix_enfant?: number | null;
+  tarifs_enfant?: ChambreTarifEnfantListItem[];
+  promotion?: ChambrePromotion | null;
+  has_promotion?: boolean;
+  nb_promotions?: number;
   date_creation: string;
   date_maj: string;
 };
@@ -210,8 +232,14 @@ export async function deleteTrancheAge(id: number) {
   await parseResponse<ApiMessage>(response);
 }
 
-export async function fetchChambres(maisonId: number) {
-  const response = await fetch(`${getApiBaseUrl()}/hebergement/chambres?maison_id=${maisonId}`, {
+export async function fetchChambres(maisonId: number, saisonId?: number) {
+  const params = new URLSearchParams({ maison_id: String(maisonId) });
+
+  if (saisonId) {
+    params.set("saison_id", String(saisonId));
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/chambres?${params}`, {
     headers: authHeaders(),
   });
 

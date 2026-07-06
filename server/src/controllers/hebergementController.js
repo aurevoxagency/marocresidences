@@ -39,6 +39,68 @@ function pickChambreFields(body = {}) {
   };
 }
 
+function promotionAppliesToChambre(promotion, chambre) {
+  if (promotion.maison_id != null && Number(promotion.maison_id) !== Number(chambre.maison_id)) {
+    return false;
+  }
+
+  if (promotion.applicable_a === "toutes_chambres") {
+    return true;
+  }
+
+  if (promotion.applicable_a === "categorie") {
+    return Number(promotion.categorie_id) === Number(chambre.categorie_id);
+  }
+
+  if (promotion.applicable_a === "chambre_specifique") {
+    return Number(promotion.chambre_id) === Number(chambre.id);
+  }
+
+  return false;
+}
+
+function getPromotionSavings(price, promotion) {
+  const base = Number(price);
+
+  if (!Number.isFinite(base) || base <= 0 || !promotion) {
+    return 0;
+  }
+
+  const value = Number(promotion.valeur_reduction);
+
+  if (promotion.type_reduction === "pourcentage") {
+    return base * (value / 100);
+  }
+
+  return Math.min(base, value);
+}
+
+function pickBestPromotionForChambre(promotions, prixAdulte) {
+  if (promotions.length === 0) {
+    return null;
+  }
+
+  let best = promotions[0];
+  let bestSavings = getPromotionSavings(prixAdulte, best);
+
+  for (let index = 1; index < promotions.length; index += 1) {
+    const candidate = promotions[index];
+    const savings = getPromotionSavings(prixAdulte, candidate);
+
+    if (savings > bestSavings) {
+      best = candidate;
+      bestSavings = savings;
+    }
+  }
+
+  return {
+    id: best.id,
+    nom: best.nom,
+    type_reduction: best.type_reduction,
+    valeur_reduction: Number(best.valeur_reduction),
+  };
+}
+
 function pickTrancheAgeFields(body = {}) {
   return {
     nom: body.nom?.trim() || null,
@@ -461,6 +523,7 @@ async function deleteTrancheAge(req, res) {
 async function getChambres(req, res) {
   try {
     const maisonId = toIntOrDefault(req.query.maison_id, 0);
+    const saisonId = toIntOrDefault(req.query.saison_id, 0);
 
     if (!maisonId) {
       return res.status(400).json({ message: "maison_id est requis." });
@@ -492,7 +555,102 @@ async function getChambres(req, res) {
       [maisonId]
     );
 
-    return res.status(200).json(rows);
+    const [promotions] = await pool.query(
+      `
+        SELECT
+          id,
+          nom,
+          type_reduction,
+          valeur_reduction,
+          applicable_a,
+          categorie_id,
+          chambre_id,
+          maison_id
+        FROM promotions
+        WHERE statut = 'active'
+          AND CURDATE() BETWEEN date_debut_validite AND date_fin_validite
+          AND (maison_id IS NULL OR maison_id = ?)
+          AND (utilisation_max IS NULL OR utilisation_actuelle < utilisation_max)
+      `,
+      [maisonId]
+    );
+
+    const tarifsAdulteByChambre = new Map();
+    const tarifsEnfantByChambre = new Map();
+
+    if (saisonId && rows.length > 0) {
+      const chambreIds = rows.map((row) => row.id);
+      const placeholders = chambreIds.map(() => "?").join(", ");
+
+      const [tarifsAdulte] = await pool.query(
+        `
+          SELECT chambre_id, prix_adulte
+          FROM tarifs_chambre
+          WHERE saison_id = ? AND chambre_id IN (${placeholders})
+        `,
+        [saisonId, ...chambreIds]
+      );
+
+      const [tarifsEnfant] = await pool.query(
+        `
+          SELECT
+            tce.chambre_id,
+            tce.prix,
+            ta.id AS tranche_age_id,
+            ta.nom AS tranche_nom,
+            ta.age_min,
+            ta.age_max
+          FROM tarifs_chambre_enfant tce
+          INNER JOIN tranches_age ta ON ta.id = tce.tranche_age_id
+          WHERE tce.saison_id = ? AND tce.chambre_id IN (${placeholders})
+          ORDER BY ta.age_min ASC
+        `,
+        [saisonId, ...chambreIds]
+      );
+
+      for (const tarif of tarifsAdulte) {
+        tarifsAdulteByChambre.set(tarif.chambre_id, Number(tarif.prix_adulte));
+      }
+
+      for (const tarif of tarifsEnfant) {
+        const list = tarifsEnfantByChambre.get(tarif.chambre_id) || [];
+        list.push({
+          tranche_age_id: Number(tarif.tranche_age_id),
+          tranche_nom: tarif.tranche_nom,
+          age_min: Number(tarif.age_min),
+          age_max: Number(tarif.age_max),
+          prix: Number(tarif.prix),
+        });
+        tarifsEnfantByChambre.set(tarif.chambre_id, list);
+      }
+    }
+
+    const chambres = rows.map((row) => {
+      const normalizedTarifs = tarifsEnfantByChambre.get(row.id) || [];
+      const bebeTranche = normalizedTarifs.find(
+        (tarif) =>
+          /b[eé]b[eé]/i.test(tarif.tranche_nom || "") || Number(tarif.age_max) <= 2
+      );
+      const autresEnfants = normalizedTarifs.filter((tarif) => tarif !== bebeTranche);
+      const prixAdulte = tarifsAdulteByChambre.get(row.id);
+      const applicablePromotions = promotions.filter((promotion) =>
+        promotionAppliesToChambre(promotion, row)
+      );
+      const promotion = pickBestPromotionForChambre(applicablePromotions, prixAdulte);
+
+      return {
+        ...row,
+        prix_adulte: prixAdulte != null ? prixAdulte : null,
+        prix_bebe: bebeTranche ? bebeTranche.prix : null,
+        prix_enfant: autresEnfants.length === 1 ? autresEnfants[0].prix : null,
+        tarifs_enfant: normalizedTarifs,
+        promotion,
+        nb_promotions: applicablePromotions.length,
+        has_promotion: applicablePromotions.length > 0,
+      };
+    });
+
+    return res.status(200).json(chambres);
   } catch (error) {
     console.error("Error fetching chambres:", error);
     return res.status(500).json({ message: "Impossible de charger les chambres." });
