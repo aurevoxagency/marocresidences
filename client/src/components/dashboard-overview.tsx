@@ -4,13 +4,14 @@ import {
   Baby,
   BedDouble,
   Building2,
+  CalendarDays,
   CalendarRange,
+  CircleDollarSign,
   Sparkles,
   Target,
   TrendingUp,
   UserPlus,
   Users,
-  UsersRound,
   UtensilsCrossed,
 } from "lucide-react";
 import {
@@ -61,7 +62,20 @@ const SOURCE_COLORS = [
   "#64748b",
 ];
 
-const ROLE_COLORS = ["#8b5cf6", "#3b82f6", "#14b8a6", "#f97316", "#ec4899"];
+const RESERVATION_COLORS: Record<string, string> = {
+  en_attente: "#f59e0b",
+  confirmee: "#10b981",
+  annulee: "#ef4444",
+  terminee: "#3b82f6",
+  no_show: "#94a3b8",
+};
+
+const RESERVATION_PAIEMENT_COLORS: Record<string, string> = {
+  non_paye: "#ef4444",
+  acompte_paye: "#f59e0b",
+  paye_totalement: "#10b981",
+  rembourse: "#8b5cf6",
+};
 
 const evolutionChartConfig = {
   prospects: { label: "Prospects", color: "#3b82f6" },
@@ -92,9 +106,29 @@ const prospectSourceChartConfig = {
   total: { label: "Prospects", color: "#8b5cf6" },
 } satisfies ChartConfig;
 
+const reservationEvolutionChartConfig = {
+  reservations: { label: "Réservations", color: "#2563eb" },
+  chiffre_affaires: { label: "Chiffre d'affaires", color: "#10b981" },
+} satisfies ChartConfig;
+
+const reservationSourceChartConfig = {
+  total: { label: "Réservations", color: "#7c3aed" },
+} satisfies ChartConfig;
+
+const reservationMaisonChartConfig = {
+  total: { label: "Réservations", color: "#0891b2" },
+} satisfies ChartConfig;
+
+function formatCurrency(value: number) {
+  const absolute = Math.abs(value);
+  const [integerPart, decimalPart = "00"] = absolute.toFixed(2).split(".");
+  const grouped = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+  return `${grouped},${decimalPart} MAD`;
+}
+
 type DashboardOverviewProps = {
   canManageMaisons: boolean;
-  isAdmin: boolean;
 };
 
 function StatCard({
@@ -163,10 +197,7 @@ function EmptyChart({ message }: { message: string }) {
   );
 }
 
-export function DashboardOverview({
-  canManageMaisons,
-  isAdmin,
-}: DashboardOverviewProps) {
+export function DashboardOverview({ canManageMaisons }: DashboardOverviewProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -236,13 +267,34 @@ export function DashboardOverview({
     }));
   }, [stats]);
 
-  const usersByRole = useMemo(() => {
-    if (!stats?.utilisateurs_par_role) return [];
+  const reservationsByStatut = useMemo(() => {
+    if (!stats) return [];
 
-    return stats.utilisateurs_par_role.map((item, index) => ({
-      role: item.label,
-      total: item.total,
-      fill: ROLE_COLORS[index % ROLE_COLORS.length],
+    return stats.reservations_par_statut.map((item) => ({
+      ...item,
+      name: item.label,
+      value: item.total,
+      fill: RESERVATION_COLORS[item.key] || "#64748b",
+    }));
+  }, [stats]);
+
+  const reservationsBySource = useMemo(() => {
+    if (!stats) return [];
+
+    return stats.reservations_par_source.map((item, index) => ({
+      ...item,
+      fill: SOURCE_COLORS[index % SOURCE_COLORS.length],
+    }));
+  }, [stats]);
+
+  const reservationsByPaiement = useMemo(() => {
+    if (!stats) return [];
+
+    return stats.reservations_par_paiement.map((item) => ({
+      ...item,
+      name: item.label,
+      value: item.total,
+      fill: RESERVATION_PAIEMENT_COLORS[item.key] || "#64748b",
     }));
   }, [stats]);
 
@@ -269,7 +321,7 @@ export function DashboardOverview({
     }));
   }, [stats]);
 
-  if (!canManageMaisons && !isAdmin) {
+  if (!canManageMaisons) {
     return (
       <div className="rounded-[22px] border border-slate-200 bg-white p-6">
         <h2 className="text-[22px] font-semibold tracking-tight text-slate-900">
@@ -336,12 +388,14 @@ export function DashboardOverview({
               <p className="mt-1 text-[20px] font-semibold">{summary.prospects}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3 backdrop-blur-sm">
-              <p className="text-[11px] text-white/65">Clients</p>
-              <p className="mt-1 text-[20px] font-semibold">{summary.clients}</p>
+              <p className="text-[11px] text-white/65">Réservations</p>
+              <p className="mt-1 text-[20px] font-semibold">{summary.reservations}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3 backdrop-blur-sm">
-              <p className="text-[11px] text-white/65">Conversion</p>
-              <p className="mt-1 text-[20px] font-semibold">{summary.taux_conversion}%</p>
+              <p className="text-[11px] text-white/65">Chiffre d&apos;affaires</p>
+              <p className="mt-1 text-[18px] font-semibold">
+                {formatCurrency(summary.chiffre_affaires_reservations)}
+              </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-3 backdrop-blur-sm">
               <p className="text-[11px] text-white/65">Capacité</p>
@@ -410,14 +464,20 @@ export function DashboardOverview({
           icon={Target}
           tone="bg-indigo-50 text-indigo-600"
         />
-        {isAdmin && summary.utilisateurs !== null ? (
-          <StatCard
-            title="Utilisateurs"
-            value={summary.utilisateurs}
-            icon={UsersRound}
-            tone="bg-[#f3e8ff] text-[#7a34c9]"
-          />
-        ) : null}
+        <StatCard
+          title="Réservations"
+          value={summary.reservations}
+          hint={`${summary.reservations_confirmees} confirmées · ${summary.reservations_en_attente} en attente`}
+          icon={CalendarDays}
+          tone="bg-blue-50 text-blue-600"
+        />
+        <StatCard
+          title="Chiffre d'affaires"
+          value={formatCurrency(summary.chiffre_affaires_reservations)}
+          hint="Hors réservations annulées"
+          icon={CircleDollarSign}
+          tone="bg-teal-50 text-teal-600"
+        />
       </div>
 
       <ChartCard
@@ -465,6 +525,99 @@ export function DashboardOverview({
           </ChartContainer>
         )}
       </ChartCard>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ChartCard
+          title="Évolution des réservations"
+          description="Nouvelles réservations et chiffre d'affaires sur les 6 derniers mois."
+        >
+          {stats.reservations_evolution_mensuelle.every(
+            (item) => item.reservations === 0 && item.chiffre_affaires === 0
+          ) ? (
+            <EmptyChart message="Pas encore de réservation sur cette période." />
+          ) : (
+            <ChartContainer config={reservationEvolutionChartConfig} className="mt-4 h-[300px] w-full">
+              <AreaChart
+                data={stats.reservations_evolution_mensuelle}
+                margin={{ left: 4, right: 8, top: 8 }}
+              >
+                <defs>
+                  <linearGradient id="fillReservations" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--color-reservations)" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="var(--color-reservations)" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="fillCaReservations" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--color-chiffre_affaires)" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="var(--color-chiffre_affaires)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis yAxisId="left" allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tickLine={false}
+                  axisLine={false}
+                  width={42}
+                  tickFormatter={(value) => `${Math.round(Number(value) / 1000)}k`}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Area
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="reservations"
+                  stroke="var(--color-reservations)"
+                  fill="url(#fillReservations)"
+                  strokeWidth={2}
+                />
+                <Area
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="chiffre_affaires"
+                  stroke="var(--color-chiffre_affaires)"
+                  fill="url(#fillCaReservations)"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ChartContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Réservations par source"
+          description="Canaux d'acquisition des réservations (site, plateformes, agence…)."
+        >
+          {reservationsBySource.length === 0 ? (
+            <EmptyChart message="Aucune réservation enregistrée." />
+          ) : (
+            <ChartContainer config={reservationSourceChartConfig} className="mt-4 h-[300px] w-full">
+              <BarChart
+                data={reservationsBySource}
+                layout="vertical"
+                margin={{ left: 8, right: 16, top: 8, bottom: 8 }}
+              >
+                <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} />
+                <YAxis
+                  type="category"
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  width={110}
+                />
+                <ChartTooltip content={<ChartTooltipContent nameKey="label" />} />
+                <Bar dataKey="total" radius={[0, 8, 8, 0]}>
+                  {reservationsBySource.map((entry) => (
+                    <Cell key={entry.key} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ChartContainer>
+          )}
+        </ChartCard>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <ChartCard
@@ -839,39 +992,63 @@ export function DashboardOverview({
           )}
         </ChartCard>
 
-        {isAdmin && usersByRole.length > 0 ? (
-          <ChartCard
-            title="Utilisateurs par rôle"
-            description="Répartition des comptes selon leur rôle."
-          >
+        <ChartCard
+          title="Réservations par statut"
+          description="Suivi des réservations confirmées, en attente, annulées et terminées."
+        >
+          {reservationsByStatut.length === 0 ? (
+            <EmptyChart message="Aucune réservation enregistrée." />
+          ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               <ChartContainer
                 config={{
-                  total: { label: "Utilisateurs", color: "#8b5cf6" },
+                  value: { label: "Réservations" },
+                  ...Object.fromEntries(
+                    reservationsByStatut.map((item) => [
+                      item.key,
+                      { label: item.name, color: item.fill },
+                    ])
+                  ),
                 }}
                 className="mx-auto aspect-square max-h-[260px]"
               >
                 <PieChart>
-                  <ChartTooltip content={<ChartTooltipContent nameKey="role" hideLabel />} />
+                  <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
                   <Pie
-                    data={usersByRole}
-                    dataKey="total"
-                    nameKey="role"
+                    data={reservationsByStatut}
+                    dataKey="value"
+                    nameKey="name"
                     innerRadius={55}
                     outerRadius={92}
                     paddingAngle={3}
                   >
-                    {usersByRole.map((entry) => (
-                      <Cell key={entry.role} fill={entry.fill} />
+                    {reservationsByStatut.map((entry) => (
+                      <Cell key={entry.key} fill={entry.fill} />
                     ))}
                   </Pie>
                 </PieChart>
               </ChartContainer>
 
               <div className="flex flex-col justify-center gap-3">
-                {usersByRole.map((item) => (
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-4">
+                  <div className="flex items-center gap-2 text-[12px] font-medium text-blue-700">
+                    <TrendingUp className="h-4 w-4" />
+                    Activité réservations
+                  </div>
+                  <p className="mt-2 text-[26px] font-semibold text-slate-900">
+                    {summary.reservations_confirmees}
+                    <span className="ml-1 text-[14px] font-normal text-slate-500">
+                      / {summary.reservations} confirmées
+                    </span>
+                  </p>
+                  <p className="mt-1 text-[12px] text-slate-500">
+                    {summary.reservations_en_attente} en attente ·{" "}
+                    {formatCurrency(summary.chiffre_affaires_reservations)} de CA
+                  </p>
+                </div>
+                {reservationsByStatut.map((item) => (
                   <div
-                    key={item.role}
+                    key={item.key}
                     className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3"
                   >
                     <div className="flex items-center gap-2 text-[13px] text-slate-700">
@@ -879,15 +1056,102 @@ export function DashboardOverview({
                         className="h-2.5 w-2.5 rounded-full"
                         style={{ backgroundColor: item.fill }}
                       />
-                      {item.role}
+                      {item.name}
                     </div>
-                    <strong className="text-[14px] text-slate-900">{item.total}</strong>
+                    <strong className="text-[14px] text-slate-900">{item.value}</strong>
                   </div>
                 ))}
               </div>
             </div>
-          </ChartCard>
-        ) : null}
+          )}
+        </ChartCard>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ChartCard
+          title="Réservations par maison"
+          description="Volume de réservations par établissement."
+        >
+          {stats.reservations_par_maison.length === 0 ? (
+            <EmptyChart message="Aucune maison enregistrée." />
+          ) : (
+            <ChartContainer config={reservationMaisonChartConfig} className="mt-4 h-[280px] w-full">
+              <BarChart
+                data={stats.reservations_par_maison}
+                margin={{ left: 8, right: 8, top: 8, bottom: 8 }}
+              >
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="maison"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  interval={0}
+                  angle={-15}
+                  textAnchor="end"
+                  height={50}
+                />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="total" fill="var(--color-total)" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Statut de paiement"
+          description="Répartition des réservations selon l'état du paiement."
+        >
+          {reservationsByPaiement.length === 0 ? (
+            <EmptyChart message="Aucune réservation enregistrée." />
+          ) : (
+            <>
+              <ChartContainer
+                config={{
+                  value: { label: "Réservations" },
+                  ...Object.fromEntries(
+                    reservationsByPaiement.map((item) => [
+                      item.key,
+                      { label: item.name, color: item.fill },
+                    ])
+                  ),
+                }}
+                className="mx-auto mt-2 aspect-square max-h-[260px]"
+              >
+                <PieChart>
+                  <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                  <Pie
+                    data={reservationsByPaiement}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={58}
+                    outerRadius={92}
+                    paddingAngle={3}
+                  >
+                    {reservationsByPaiement.map((entry) => (
+                      <Cell key={entry.key} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ChartContainer>
+              <div className="mt-2 flex flex-wrap justify-center gap-3">
+                {reservationsByPaiement.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center gap-2 text-[12px] text-slate-600"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: item.fill }}
+                    />
+                    {item.name}: <strong>{item.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </ChartCard>
       </div>
     </div>
   );

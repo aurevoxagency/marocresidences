@@ -1,7 +1,5 @@
 const { pool } = require("../../database/db");
 
-const ADMIN_ROLE_IDS = new Set([1, 2]);
-
 const PROSPECT_STATUT_LABELS = {
   nouveau: "Nouveau",
   contacte: "Contacté",
@@ -27,11 +25,29 @@ const MAISON_STATUT_LABELS = {
   en_attente: "En attente",
 };
 
-const ROLE_LABELS = {
-  1: "Super admin",
-  2: "Admin",
-  3: "Client",
-  4: "Réceptionniste",
+const RESERVATION_STATUT_LABELS = {
+  en_attente: "En attente",
+  confirmee: "Confirmée",
+  annulee: "Annulée",
+  terminee: "Terminée",
+  no_show: "No-show",
+};
+
+const RESERVATION_SOURCE_LABELS = {
+  site_web: "Site web",
+  booking: "Booking",
+  airbnb: "Airbnb",
+  agence: "Agence",
+  telephone: "Téléphone",
+  walk_in: "Walk-in",
+  autre: "Autre",
+};
+
+const RESERVATION_PAIEMENT_LABELS = {
+  non_paye: "Non payé",
+  acompte_paye: "Acompte payé",
+  paye_totalement: "Payé totalement",
+  rembourse: "Remboursé",
 };
 
 const MONTH_LABELS = [
@@ -95,9 +111,24 @@ function mergeMonthlyTrend(months, prospectRows, clientRows) {
   }));
 }
 
+function mergeReservationMonthlyTrend(months, reservationRows) {
+  const countMap = new Map(
+    reservationRows.map((row) => [row.month, Number(row.total) || 0])
+  );
+  const revenueMap = new Map(
+    reservationRows.map((row) => [row.month, Number(row.ca) || 0])
+  );
+
+  return months.map((item) => ({
+    month: item.month,
+    label: item.label,
+    reservations: countMap.get(item.month) || 0,
+    chiffre_affaires: revenueMap.get(item.month) || 0,
+  }));
+}
+
 async function getDashboardStats(req, res) {
   try {
-    const isAdmin = ADMIN_ROLE_IDS.has(Number(req.auth?.role_id));
     const months = buildLastMonths(6);
     const oldestMonth = months[0]?.month;
 
@@ -106,12 +137,18 @@ async function getDashboardStats(req, res) {
       [hebergementSummary],
       [prospectSummary],
       [clientSummary],
+      [reservationSummary],
       [maisonsStatut],
       [maisonsVille],
       [prospectsStatut],
       [prospectsSource],
       [prospectsMonthly],
       [clientsMonthly],
+      [reservationsStatut],
+      [reservationsSource],
+      [reservationsPaiement],
+      [reservationsMonthly],
+      [reservationsMaison],
       [chambresMaison],
       [chambresStatut],
       [saisonsMaison],
@@ -140,6 +177,22 @@ async function getDashboardStats(req, res) {
         FROM prospects
       `),
       pool.query(`SELECT COUNT(*) AS total FROM clients`),
+      pool.query(`
+        SELECT
+          COUNT(*) AS total,
+          SUM(statut_reservation = 'confirmee') AS confirmees,
+          SUM(statut_reservation = 'en_attente') AS en_attente,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN statut_reservation NOT IN ('annulee') THEN prix_total_ttc
+                ELSE 0
+              END
+            ),
+            0
+          ) AS chiffre_affaires
+        FROM reservations
+      `),
       pool.query(`
         SELECT statut AS \`key\`, COUNT(*) AS total
         FROM maisons_hotes
@@ -188,6 +241,64 @@ async function getDashboardStats(req, res) {
         [`${oldestMonth}-01`]
       ),
       pool.query(`
+        SELECT statut_reservation AS \`key\`, COUNT(*) AS total
+        FROM reservations
+        GROUP BY statut_reservation
+        ORDER BY total DESC
+      `),
+      pool.query(`
+        SELECT source AS \`key\`, COUNT(*) AS total
+        FROM reservations
+        GROUP BY source
+        ORDER BY total DESC
+      `),
+      pool.query(`
+        SELECT statut_paiement AS \`key\`, COUNT(*) AS total
+        FROM reservations
+        GROUP BY statut_paiement
+        ORDER BY total DESC
+      `),
+      pool.query(
+        `
+          SELECT
+            DATE_FORMAT(date_creation, '%Y-%m') AS month,
+            COUNT(*) AS total,
+            COALESCE(
+              SUM(
+                CASE
+                  WHEN statut_reservation NOT IN ('annulee') THEN prix_total_ttc
+                  ELSE 0
+                END
+              ),
+              0
+            ) AS ca
+          FROM reservations
+          WHERE date_creation >= DATE_FORMAT(?, '%Y-%m-01')
+          GROUP BY month
+          ORDER BY month ASC
+        `,
+        [`${oldestMonth}-01`]
+      ),
+      pool.query(`
+        SELECT
+          m.nom AS maison,
+          COUNT(r.id) AS total,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN r.statut_reservation NOT IN ('annulee') THEN r.prix_total_ttc
+                ELSE 0
+              END
+            ),
+            0
+          ) AS chiffre_affaires
+        FROM maisons_hotes m
+        LEFT JOIN reservations r ON r.maison_id = m.id
+        GROUP BY m.id, m.nom
+        ORDER BY total DESC, chiffre_affaires DESC, m.nom ASC
+        LIMIT 6
+      `),
+      pool.query(`
         SELECT
           m.nom AS maison,
           COUNT(c.id) AS chambres,
@@ -229,28 +340,6 @@ async function getDashboardStats(req, res) {
       `),
     ]);
 
-    let utilisateursParRole = null;
-    let utilisateursTotal = null;
-
-    if (isAdmin) {
-      const [[usersTotal], [usersRole]] = await Promise.all([
-        pool.query("SELECT COUNT(*) AS total FROM users"),
-        pool.query(`
-          SELECT role_id, COUNT(*) AS total
-          FROM users
-          GROUP BY role_id
-          ORDER BY total DESC
-        `),
-      ]);
-
-      utilisateursTotal = Number(usersTotal[0]?.total) || 0;
-      utilisateursParRole = usersRole.map((row) => ({
-        role_id: Number(row.role_id),
-        label: ROLE_LABELS[row.role_id] || `Rôle ${row.role_id}`,
-        total: Number(row.total) || 0,
-      }));
-    }
-
     const prospectsTotal = Number(prospectSummary[0]?.total) || 0;
     const prospectsConvertis = Number(prospectSummary[0]?.convertis) || 0;
 
@@ -271,7 +360,11 @@ async function getDashboardStats(req, res) {
             ? Math.round((prospectsConvertis / prospectsTotal) * 1000) / 10
             : 0,
         clients: Number(clientSummary[0]?.total) || 0,
-        utilisateurs: utilisateursTotal,
+        reservations: Number(reservationSummary[0]?.total) || 0,
+        reservations_confirmees: Number(reservationSummary[0]?.confirmees) || 0,
+        reservations_en_attente: Number(reservationSummary[0]?.en_attente) || 0,
+        chiffre_affaires_reservations:
+          Number(reservationSummary[0]?.chiffre_affaires) || 0,
       },
       maisons_par_statut: mapCounts(maisonsStatut, MAISON_STATUT_LABELS),
       maisons_par_ville: maisonsVille.map((row) => ({
@@ -304,7 +397,18 @@ async function getDashboardStats(req, res) {
         label: row.vip ? "Clients VIP" : "Clients standard",
         total: Number(row.total) || 0,
       })),
-      utilisateurs_par_role: utilisateursParRole,
+      reservations_par_statut: mapCounts(reservationsStatut, RESERVATION_STATUT_LABELS),
+      reservations_par_source: mapCounts(reservationsSource, RESERVATION_SOURCE_LABELS),
+      reservations_par_paiement: mapCounts(reservationsPaiement, RESERVATION_PAIEMENT_LABELS),
+      reservations_evolution_mensuelle: mergeReservationMonthlyTrend(
+        months,
+        reservationsMonthly
+      ),
+      reservations_par_maison: reservationsMaison.map((row) => ({
+        maison: row.maison,
+        total: Number(row.total) || 0,
+        chiffre_affaires: Number(row.chiffre_affaires) || 0,
+      })),
     });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);

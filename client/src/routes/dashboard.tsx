@@ -591,10 +591,7 @@ function DashboardPage() {
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 lg:p-7">
         {activeView === "dashboard" ? (
-          <DashboardOverview
-            canManageMaisons={canManageGuestHouses}
-            isAdmin={isAdmin}
-          />
+          <DashboardOverview canManageMaisons={canManageGuestHouses} />
         ) : null}
 
         {activeView === "maisons" && canManageGuestHouses ? (

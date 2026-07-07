@@ -15,7 +15,10 @@ export type DashboardSummary = {
   prospects_convertis: number;
   taux_conversion: number;
   clients: number;
-  utilisateurs: number | null;
+  reservations: number;
+  reservations_confirmees: number;
+  reservations_en_attente: number;
+  chiffre_affaires_reservations: number;
 };
 
 export type DashboardCountItem = {
@@ -45,7 +48,20 @@ export type DashboardStats = {
   saisons_par_maison: { maison: string; total: number }[];
   clients_par_nationalite: { nationalite: string; total: number }[];
   clients_vip: { vip: boolean; label: string; total: number }[];
-  utilisateurs_par_role: { role_id: number; label: string; total: number }[] | null;
+  reservations_par_statut: DashboardCountItem[];
+  reservations_par_source: DashboardCountItem[];
+  reservations_par_paiement: DashboardCountItem[];
+  reservations_evolution_mensuelle: {
+    month: string;
+    label: string;
+    reservations: number;
+    chiffre_affaires: number;
+  }[];
+  reservations_par_maison: {
+    maison: string;
+    total: number;
+    chiffre_affaires: number;
+  }[];
 };
 
 export async function fetchDashboardStats() {
