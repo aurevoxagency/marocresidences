@@ -44,13 +44,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   buildEmptyChambreTarifs,
   buildEmptySupplementTarifs,
   createChambre,
   createSaison,
+  createSupplement,
   deleteChambre,
   deleteSaison,
+  deleteSupplement,
   fetchChambre,
   fetchChambres,
   fetchHebergementReferences,
@@ -60,6 +63,7 @@ import {
   mergeSupplementTarifs,
   updateChambre,
   updateSaison,
+  updateSupplement,
   updateSupplementTarifs,
   type ChambreDetail,
   type ChambreListItem,
@@ -90,6 +94,16 @@ type ChambreFormState = {
   statut: "actif" | "inactif";
   tarifs: TarifChambre[];
 };
+
+type SupplementFormState = {
+  nom: string;
+  description: string;
+  statut: "actif" | "inactif";
+};
+
+function emptySupplementForm(): SupplementFormState {
+  return { nom: "", description: "", statut: "actif" };
+}
 
 function emptySaisonForm(): SaisonFormState {
   return { nom: "", date_debut: "", date_fin: "", couleur: "#3b82f6" };
@@ -351,7 +365,8 @@ const TAB_COPY: Record<
   },
   supplements: {
     title: "Gestion des suppléments",
-    description: "Gérez les tarifs des suppléments (repas, transferts, etc.) par saison.",
+    description:
+      "Ajoutez, modifiez ou supprimez les suppléments (repas, transferts…) et leurs tarifs par saison.",
   },
 };
 
@@ -388,6 +403,16 @@ export function HebergementManagement({
   const [supplementDialogOpen, setSupplementDialogOpen] = useState(false);
   const [editingSupplement, setEditingSupplement] = useState<SupplementTarifRow | null>(null);
   const [supplementTarifs, setSupplementTarifs] = useState<TarifSupplement[]>([]);
+  const [supplementFormOpen, setSupplementFormOpen] = useState(false);
+  const [editingSupplementMeta, setEditingSupplementMeta] = useState<SupplementTarifRow | null>(
+    null
+  );
+  const [supplementForm, setSupplementForm] = useState<SupplementFormState>(emptySupplementForm());
+  const [supplementFormError, setSupplementFormError] = useState("");
+  const [savingSupplement, setSavingSupplement] = useState(false);
+  const [deleteSupplementTarget, setDeleteSupplementTarget] = useState<SupplementTarifRow | null>(
+    null
+  );
   const [tarifSaisonId, setTarifSaisonId] = useState("");
   const [activeTab, setActiveTab] = useState<HebergementTab>(defaultTab);
 
@@ -609,6 +634,77 @@ export function HebergementManagement({
       mergeSupplementTarifs(saisons, references.tranches_age, supplement.tarifs)
     );
     setSupplementDialogOpen(true);
+  };
+
+  const openCreateSupplement = () => {
+    setEditingSupplementMeta(null);
+    setSupplementForm(emptySupplementForm());
+    setSupplementFormError("");
+    setSupplementFormOpen(true);
+  };
+
+  const openEditSupplement = (supplement: SupplementTarifRow) => {
+    setEditingSupplementMeta(supplement);
+    setSupplementForm({
+      nom: supplement.nom,
+      description: supplement.description || "",
+      statut: supplement.statut,
+    });
+    setSupplementFormError("");
+    setSupplementFormOpen(true);
+  };
+
+  const saveSupplement = async () => {
+    const payload = {
+      nom: supplementForm.nom.trim(),
+      description: supplementForm.description.trim() || null,
+      statut: supplementForm.statut,
+    };
+
+    if (!payload.nom) {
+      setSupplementFormError("Le nom est requis.");
+      return;
+    }
+
+    setSavingSupplement(true);
+    setSupplementFormError("");
+    setErrorMessage("");
+
+    try {
+      if (editingSupplementMeta) {
+        await updateSupplement(editingSupplementMeta.id, payload);
+      } else {
+        await createSupplement(payload);
+      }
+
+      setSupplementFormOpen(false);
+      await loadData();
+    } catch (error) {
+      setSupplementFormError(
+        error instanceof Error ? error.message : "Impossible d'enregistrer le supplément."
+      );
+    } finally {
+      setSavingSupplement(false);
+    }
+  };
+
+  const confirmDeleteSupplement = async () => {
+    if (!deleteSupplementTarget) {
+      return;
+    }
+
+    setErrorMessage("");
+
+    try {
+      await deleteSupplement(deleteSupplementTarget.id);
+      setDeleteSupplementTarget(null);
+      await loadData();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Impossible de supprimer le supplément."
+      );
+      setDeleteSupplementTarget(null);
+    }
   };
 
   const saveSupplementTarifs = async () => {
@@ -907,20 +1003,29 @@ export function HebergementManagement({
           </TabsContent>
 
           <TabsContent value="supplements" className="space-y-4">
+            <div className="flex justify-end">
+              <Button onClick={openCreateSupplement} className="rounded-full">
+                <Plus className="h-4 w-4" />
+                Nouveau supplément
+              </Button>
+            </div>
+
             <div className="overflow-hidden rounded-[22px] border border-slate-200 bg-white">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Supplément</TableHead>
                     <TableHead>Description</TableHead>
+                    <TableHead>Statut</TableHead>
                     <TableHead className="w-32">Tarifs</TableHead>
+                    <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {supplements.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={3} className="py-8 text-center text-slate-500">
-                        Aucun supplément actif dans le catalogue.
+                      <TableCell colSpan={5} className="py-8 text-center text-slate-500">
+                        Aucun supplément dans le catalogue.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -929,6 +1034,17 @@ export function HebergementManagement({
                         <TableCell className="font-medium">{supplement.nom}</TableCell>
                         <TableCell className="text-slate-500">
                           {supplement.description || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={
+                              supplement.statut === "actif"
+                                ? "text-emerald-600"
+                                : "text-slate-400"
+                            }
+                          >
+                            {supplement.statut === "actif" ? "Actif" : "Inactif"}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <Button
@@ -940,6 +1056,29 @@ export function HebergementManagement({
                             <Pencil className="h-4 w-4" />
                             Tarifs
                           </Button>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditSupplement(supplement)}>
+                                <Pencil className="h-4 w-4" />
+                                Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => setDeleteSupplementTarget(supplement)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Supprimer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1155,6 +1294,72 @@ export function HebergementManagement({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={supplementFormOpen} onOpenChange={setSupplementFormOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingSupplementMeta ? "Modifier le supplément" : "Nouveau supplément"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="supplement-nom">Nom</Label>
+              <Input
+                id="supplement-nom"
+                value={supplementForm.nom}
+                onChange={(e) =>
+                  setSupplementForm((current) => ({ ...current, nom: e.target.value }))
+                }
+                placeholder="Ex. Petit-déjeuner, Transfert aéroport"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="supplement-description">Description</Label>
+              <Textarea
+                id="supplement-description"
+                value={supplementForm.description}
+                onChange={(e) =>
+                  setSupplementForm((current) => ({
+                    ...current,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder="Optionnel"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Statut</Label>
+              <Select
+                value={supplementForm.statut}
+                onValueChange={(value: "actif" | "inactif") =>
+                  setSupplementForm((current) => ({ ...current, statut: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="actif">Actif</SelectItem>
+                  <SelectItem value="inactif">Inactif</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {supplementFormError ? (
+              <p className="text-sm text-destructive">{supplementFormError}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSupplementFormOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={() => void saveSupplement()} disabled={savingSupplement}>
+              {savingSupplement ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={supplementDialogOpen} onOpenChange={setSupplementDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
@@ -1216,6 +1421,33 @@ export function HebergementManagement({
                 if (!deleteChambreTarget) return;
                 void deleteChambre(deleteChambreTarget.id).then(loadData);
                 setDeleteChambreTarget(null);
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(deleteSupplementTarget)}
+        onOpenChange={(open) => !open && setDeleteSupplementTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce supplément ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Le supplément « {deleteSupplementTarget?.nom} » et ses tarifs seront
+              définitivement supprimés s&apos;il n&apos;est pas utilisé par des réservations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteSupplement();
               }}
             >
               Supprimer

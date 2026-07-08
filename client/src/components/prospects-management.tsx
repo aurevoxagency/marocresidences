@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Plus, Search, Trash2, UserCheck } from "lucide-react";
 
 import {
   AlertDialog,
@@ -46,6 +46,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { fetchMaisons, type MaisonListItem } from "@/lib/maisons";
 import {
+  convertProspectToClient,
   createProspect,
   deleteProspect,
   fetchProspects,
@@ -197,6 +198,8 @@ export function ProspectsManagement() {
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Prospect | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [convertTarget, setConvertTarget] = useState<Prospect | null>(null);
+  const [converting, setConverting] = useState(false);
   const [search, setSearch] = useState("");
   const [filterStatut, setFilterStatut] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
@@ -335,6 +338,26 @@ export function ProspectsManagement() {
     }
   };
 
+  const handleConvert = async () => {
+    if (!convertTarget) return;
+
+    setConverting(true);
+    setError(null);
+
+    try {
+      await convertProspectToClient(convertTarget.id);
+      setConvertTarget(null);
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Impossible de convertir le prospect en client."
+      );
+      setConvertTarget(null);
+    } finally {
+      setConverting(false);
+    }
+  };
+
   return (
     <div className="w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -458,7 +481,7 @@ export function ProspectsManagement() {
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuContent align="end" className="w-52">
                         <DropdownMenuItem
                           className="cursor-pointer gap-2"
                           onClick={() => openEditDialog(prospect)}
@@ -466,6 +489,15 @@ export function ProspectsManagement() {
                           <Pencil className="h-4 w-4" />
                           Modifier
                         </DropdownMenuItem>
+                        {prospect.statut !== "converti" ? (
+                          <DropdownMenuItem
+                            className="cursor-pointer gap-2"
+                            onClick={() => setConvertTarget(prospect)}
+                          >
+                            <UserCheck className="h-4 w-4" />
+                            Convertir en client
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="cursor-pointer gap-2 text-red-600 focus:bg-red-50 focus:text-red-700"
@@ -766,6 +798,36 @@ export function ProspectsManagement() {
               className="bg-red-600 hover:bg-red-700"
             >
               {deleting ? "Suppression..." : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(convertTarget)}
+        onOpenChange={(open) => !open && setConvertTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Convertir en client ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Le prospect{" "}
+              <strong>
+                {convertTarget?.prenom} {convertTarget?.nom}
+              </strong>{" "}
+              sera ajouté à la liste des clients et son statut passera à « Converti ».
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={converting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConvert();
+              }}
+              disabled={converting}
+            >
+              {converting ? "Conversion..." : "Convertir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

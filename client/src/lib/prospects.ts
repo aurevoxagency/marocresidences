@@ -130,3 +130,16 @@ export async function deleteProspect(id: number) {
 
   await parseResponse<ApiMessage>(response);
 }
+
+export async function convertProspectToClient(id: number) {
+  const response = await fetch(`${getApiBaseUrl()}/prospects/${id}/convert`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+
+  return parseResponse<{
+    message?: string;
+    client: { id: number };
+    prospect: Prospect;
+  }>(response);
+}

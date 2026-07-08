@@ -109,6 +109,20 @@ function pickTrancheAgeFields(body = {}) {
   };
 }
 
+function pickCategorieChambreFields(body = {}) {
+  return {
+    nom: body.nom?.trim() || null,
+  };
+}
+
+function pickSupplementFields(body = {}) {
+  return {
+    nom: body.nom?.trim() || null,
+    description: body.description?.trim() || null,
+    statut: STATUTS.has(body.statut) ? body.statut : "actif",
+  };
+}
+
 async function syncMaisonChambreCounts(connection, maisonId) {
   await connection.query(
     `
@@ -520,6 +534,123 @@ async function deleteTrancheAge(req, res) {
   }
 }
 
+async function getCategoriesChambre(req, res) {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, nom FROM categories_chambre ORDER BY nom ASC"
+    );
+
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error("Error fetching categories chambre:", error);
+    return res.status(500).json({ message: "Impossible de charger les catégories." });
+  }
+}
+
+async function createCategorieChambre(req, res) {
+  try {
+    const fields = pickCategorieChambreFields(req.body);
+
+    if (!fields.nom) {
+      return res.status(400).json({ message: "Le nom est requis." });
+    }
+
+    const [result] = await pool.query(
+      "INSERT INTO categories_chambre (nom) VALUES (?)",
+      [fields.nom]
+    );
+
+    const [rows] = await pool.query(
+      "SELECT id, nom FROM categories_chambre WHERE id = ? LIMIT 1",
+      [result.insertId]
+    );
+
+    return res.status(201).json({
+      message: "Catégorie créée avec succès.",
+      categorie: rows[0],
+    });
+  } catch (error) {
+    console.error("Error creating categorie chambre:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Cette catégorie existe déjà." });
+    }
+
+    return res.status(500).json({ message: "Impossible de créer la catégorie." });
+  }
+}
+
+async function updateCategorieChambre(req, res) {
+  try {
+    const { id } = req.params;
+    const fields = pickCategorieChambreFields(req.body);
+
+    if (!fields.nom) {
+      return res.status(400).json({ message: "Le nom est requis." });
+    }
+
+    const [result] = await pool.query(
+      "UPDATE categories_chambre SET nom = ? WHERE id = ?",
+      [fields.nom, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Catégorie introuvable." });
+    }
+
+    const [rows] = await pool.query(
+      "SELECT id, nom FROM categories_chambre WHERE id = ? LIMIT 1",
+      [id]
+    );
+
+    return res.status(200).json({
+      message: "Catégorie mise à jour.",
+      categorie: rows[0],
+    });
+  } catch (error) {
+    console.error("Error updating categorie chambre:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Cette catégorie existe déjà." });
+    }
+
+    return res.status(500).json({ message: "Impossible de mettre à jour la catégorie." });
+  }
+}
+
+async function deleteCategorieChambre(req, res) {
+  try {
+    const { id } = req.params;
+
+    const [usage] = await pool.query(
+      `
+        SELECT
+          (SELECT COUNT(*) FROM chambres WHERE categorie_id = ?) +
+          (SELECT COUNT(*) FROM promotions WHERE categorie_id = ?) AS total
+      `,
+      [id, id]
+    );
+
+    if (usage[0]?.total > 0) {
+      return res.status(409).json({
+        message:
+          "Cette catégorie est utilisée par des chambres ou des promotions et ne peut pas être supprimée.",
+      });
+    }
+
+    const [result] = await pool.query("DELETE FROM categories_chambre WHERE id = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Catégorie introuvable." });
+    }
+
+    return res.status(200).json({ message: "Catégorie supprimée." });
+  } catch (error) {
+    console.error("Error deleting categorie chambre:", error);
+    return res.status(500).json({ message: "Impossible de supprimer la catégorie." });
+  }
+}
+
 async function getChambres(req, res) {
   try {
     const maisonId = toIntOrDefault(req.query.maison_id, 0);
@@ -842,6 +973,133 @@ async function deleteChambre(req, res) {
   }
 }
 
+async function getSupplements(req, res) {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, nom, description, statut FROM supplements ORDER BY nom ASC"
+    );
+
+    return res.status(200).json(rows);
+  } catch (error) {
+    console.error("Error fetching supplements:", error);
+    return res.status(500).json({ message: "Impossible de charger les suppléments." });
+  }
+}
+
+async function createSupplement(req, res) {
+  try {
+    const fields = pickSupplementFields(req.body);
+
+    if (!fields.nom) {
+      return res.status(400).json({ message: "Le nom est requis." });
+    }
+
+    const [result] = await pool.query(
+      "INSERT INTO supplements (nom, description, statut) VALUES (?, ?, ?)",
+      [fields.nom, fields.description, fields.statut]
+    );
+
+    const [rows] = await pool.query(
+      "SELECT id, nom, description, statut FROM supplements WHERE id = ? LIMIT 1",
+      [result.insertId]
+    );
+
+    return res.status(201).json({
+      message: "Supplément créé avec succès.",
+      supplement: rows[0],
+    });
+  } catch (error) {
+    console.error("Error creating supplement:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Ce supplément existe déjà." });
+    }
+
+    return res.status(500).json({ message: "Impossible de créer le supplément." });
+  }
+}
+
+async function updateSupplement(req, res) {
+  try {
+    const { id } = req.params;
+    const fields = pickSupplementFields(req.body);
+
+    if (!fields.nom) {
+      return res.status(400).json({ message: "Le nom est requis." });
+    }
+
+    const [result] = await pool.query(
+      "UPDATE supplements SET nom = ?, description = ?, statut = ? WHERE id = ?",
+      [fields.nom, fields.description, fields.statut, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Supplément introuvable." });
+    }
+
+    const [rows] = await pool.query(
+      "SELECT id, nom, description, statut FROM supplements WHERE id = ? LIMIT 1",
+      [id]
+    );
+
+    return res.status(200).json({
+      message: "Supplément mis à jour.",
+      supplement: rows[0],
+    });
+  } catch (error) {
+    console.error("Error updating supplement:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Ce supplément existe déjà." });
+    }
+
+    return res.status(500).json({ message: "Impossible de mettre à jour le supplément." });
+  }
+}
+
+async function deleteSupplement(req, res) {
+  const connection = await pool.getConnection();
+
+  try {
+    const { id } = req.params;
+
+    const [usage] = await connection.query(
+      "SELECT COUNT(*) AS total FROM reservations WHERE supplement_id = ?",
+      [id]
+    );
+
+    if (usage[0]?.total > 0) {
+      return res.status(409).json({
+        message:
+          "Ce supplément est utilisé par des réservations et ne peut pas être supprimé.",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    await connection.query("DELETE FROM tarifs_supplement_enfant WHERE supplement_id = ?", [
+      id,
+    ]);
+    await connection.query("DELETE FROM tarifs_supplement WHERE supplement_id = ?", [id]);
+
+    const [result] = await connection.query("DELETE FROM supplements WHERE id = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Supplément introuvable." });
+    }
+
+    await connection.commit();
+    return res.status(200).json({ message: "Supplément supprimé." });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error deleting supplement:", error);
+    return res.status(500).json({ message: "Impossible de supprimer le supplément." });
+  } finally {
+    connection.release();
+  }
+}
+
 async function getSupplementTarifs(req, res) {
   try {
     const maisonId = toIntOrDefault(req.query.maison_id, 0);
@@ -862,7 +1120,7 @@ async function getSupplementTarifs(req, res) {
     }
 
     const [supplements] = await pool.query(
-      "SELECT id, nom, description, statut FROM supplements WHERE statut = 'actif' ORDER BY nom ASC"
+      "SELECT id, nom, description, statut FROM supplements ORDER BY nom ASC"
     );
 
     const [tarifs] = await pool.query(
@@ -1008,11 +1266,19 @@ module.exports = {
   createTrancheAge,
   updateTrancheAge,
   deleteTrancheAge,
+  getCategoriesChambre,
+  createCategorieChambre,
+  updateCategorieChambre,
+  deleteCategorieChambre,
   getChambres,
   getChambreById,
   createChambre,
   updateChambre,
   deleteChambre,
+  getSupplements,
+  createSupplement,
+  updateSupplement,
+  deleteSupplement,
   getSupplementTarifs,
   updateSupplementTarifs,
 };

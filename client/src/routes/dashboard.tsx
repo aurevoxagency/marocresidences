@@ -14,6 +14,7 @@ import {
   CreditCard,
   Home,
   LayoutDashboard,
+  Layers,
   LogOut,
   Maximize,
   Menu,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 
 import { AccountSettings } from "@/components/account-settings";
+import { CategoriesChambreManagement } from "@/components/categories-chambre-management";
 import { ClientsManagement } from "@/components/clients-management";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { HebergementManagement } from "@/components/hebergement-management";
@@ -78,6 +80,7 @@ type DashboardView =
   | "gestion_commerciale"
   | "gestion_saisons"
   | "gestion_chambres"
+  | "gestion_categories"
   | "gestion_supplements"
   | "gestion_tranches_age"
   | "promotions"
@@ -343,6 +346,12 @@ function DashboardPage() {
         { id: "maisons", label: "Maisons d'hôtes", icon: Home },
         { id: "gestion_saisons", label: "Gestion des saisons", icon: CalendarRange, indent: true },
         { id: "gestion_chambres", label: "Gestion des chambres", icon: BedDouble, indent: true },
+        {
+          id: "gestion_categories",
+          label: "Gestion des catégories",
+          icon: Layers,
+          indent: true,
+        },
         {
           id: "gestion_tranches_age",
           label: "Gestion des tranches d'âge",
@@ -620,6 +629,10 @@ function DashboardPage() {
 
         {activeView === "gestion_chambres" && canManageGuestHouses ? (
           <HebergementManagement defaultTab="chambres" singleTab />
+        ) : null}
+
+        {activeView === "gestion_categories" && canManageGuestHouses ? (
+          <CategoriesChambreManagement />
         ) : null}
 
         {activeView === "gestion_supplements" && canManageGuestHouses ? (

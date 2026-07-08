@@ -35,7 +35,6 @@ function toBool(value) {
 
 function pickClientFields(body = {}) {
   return {
-    prospect_id: toIntOrNull(body.prospect_id),
     civilite: CIVILITES.has(body.civilite) ? body.civilite : null,
     nom: body.nom?.trim() || null,
     prenom: emptyToNull(body.prenom?.trim()),
@@ -59,26 +58,24 @@ function pickClientFields(body = {}) {
   };
 }
 
+function mapClientRow(row) {
+  return {
+    ...row,
+    is_vip: Boolean(row.is_vip),
+  };
+}
+
 async function getClients(req, res) {
   try {
     const [rows] = await pool.query(
       `
-        SELECT
-          c.*,
-          CONCAT(COALESCE(p.prenom, ''), ' ', COALESCE(p.nom, '')) AS prospect_nom
-        FROM clients c
-        LEFT JOIN prospects p ON p.id = c.prospect_id
-        ORDER BY c.date_maj DESC
+        SELECT *
+        FROM clients
+        ORDER BY date_maj DESC
       `
     );
 
-    return res.status(200).json(
-      rows.map((row) => ({
-        ...row,
-        is_vip: Boolean(row.is_vip),
-        prospect_nom: row.prospect_nom?.trim() || null,
-      }))
-    );
+    return res.status(200).json(rows.map(mapClientRow));
   } catch (error) {
     console.error("Error fetching clients:", error);
     return res.status(500).json({ message: "Unable to fetch clients." });
@@ -89,12 +86,9 @@ async function getClientById(req, res) {
   try {
     const [rows] = await pool.query(
       `
-        SELECT
-          c.*,
-          CONCAT(COALESCE(p.prenom, ''), ' ', COALESCE(p.nom, '')) AS prospect_nom
-        FROM clients c
-        LEFT JOIN prospects p ON p.id = c.prospect_id
-        WHERE c.id = ?
+        SELECT *
+        FROM clients
+        WHERE id = ?
         LIMIT 1
       `,
       [req.params.id]
@@ -104,11 +98,7 @@ async function getClientById(req, res) {
       return res.status(404).json({ message: "Client not found." });
     }
 
-    return res.status(200).json({
-      ...rows[0],
-      is_vip: Boolean(rows[0].is_vip),
-      prospect_nom: rows[0].prospect_nom?.trim() || null,
-    });
+    return res.status(200).json(mapClientRow(rows[0]));
   } catch (error) {
     console.error("Error fetching client:", error);
     return res.status(500).json({ message: "Unable to fetch client." });
@@ -126,15 +116,14 @@ async function createClient(req, res) {
     const [result] = await pool.query(
       `
         INSERT INTO clients (
-          prospect_id, civilite, nom, prenom, date_naissance, nationalite,
+          civilite, nom, prenom, date_naissance, nationalite,
           type_piece, numero_piece, email, telephone, adresse, ville, pays,
           langue_preferee, allergies_regime, notes_preferences,
           is_vip, nb_reservations_total, montant_total_depense,
           date_premiere_reservation, date_derniere_reservation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        fields.prospect_id,
         fields.civilite,
         fields.nom,
         fields.prenom,
@@ -159,25 +148,13 @@ async function createClient(req, res) {
     );
 
     const [rows] = await pool.query(
-      `
-        SELECT
-          c.*,
-          CONCAT(COALESCE(p.prenom, ''), ' ', COALESCE(p.nom, '')) AS prospect_nom
-        FROM clients c
-        LEFT JOIN prospects p ON p.id = c.prospect_id
-        WHERE c.id = ?
-        LIMIT 1
-      `,
+      "SELECT * FROM clients WHERE id = ? LIMIT 1",
       [result.insertId]
     );
 
     return res.status(201).json({
       message: "Client créé avec succès.",
-      client: {
-        ...rows[0],
-        is_vip: Boolean(rows[0].is_vip),
-        prospect_nom: rows[0].prospect_nom?.trim() || null,
-      },
+      client: mapClientRow(rows[0]),
     });
   } catch (error) {
     console.error("Error creating client:", error);
@@ -197,7 +174,7 @@ async function updateClient(req, res) {
     const [result] = await pool.query(
       `
         UPDATE clients SET
-          prospect_id = ?, civilite = ?, nom = ?, prenom = ?, date_naissance = ?, nationalite = ?,
+          civilite = ?, nom = ?, prenom = ?, date_naissance = ?, nationalite = ?,
           type_piece = ?, numero_piece = ?, email = ?, telephone = ?, adresse = ?, ville = ?, pays = ?,
           langue_preferee = ?, allergies_regime = ?, notes_preferences = ?,
           is_vip = ?, nb_reservations_total = ?, montant_total_depense = ?,
@@ -205,7 +182,6 @@ async function updateClient(req, res) {
         WHERE id = ?
       `,
       [
-        fields.prospect_id,
         fields.civilite,
         fields.nom,
         fields.prenom,
@@ -234,26 +210,11 @@ async function updateClient(req, res) {
       return res.status(404).json({ message: "Client not found." });
     }
 
-    const [rows] = await pool.query(
-      `
-        SELECT
-          c.*,
-          CONCAT(COALESCE(p.prenom, ''), ' ', COALESCE(p.nom, '')) AS prospect_nom
-        FROM clients c
-        LEFT JOIN prospects p ON p.id = c.prospect_id
-        WHERE c.id = ?
-        LIMIT 1
-      `,
-      [id]
-    );
+    const [rows] = await pool.query("SELECT * FROM clients WHERE id = ? LIMIT 1", [id]);
 
     return res.status(200).json({
       message: "Client mis à jour avec succès.",
-      client: {
-        ...rows[0],
-        is_vip: Boolean(rows[0].is_vip),
-        prospect_nom: rows[0].prospect_nom?.trim() || null,
-      },
+      client: mapClientRow(rows[0]),
     });
   } catch (error) {
     console.error("Error updating client:", error);
@@ -262,19 +223,38 @@ async function updateClient(req, res) {
 }
 
 async function deleteClient(req, res) {
-  try {
-    const [result] = await pool.query("DELETE FROM clients WHERE id = ?", [
-      req.params.id,
-    ]);
+  const connection = await pool.getConnection();
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Client not found." });
+  try {
+    const { id } = req.params;
+
+    await connection.beginTransaction();
+
+    const [existing] = await connection.query(
+      "SELECT id FROM clients WHERE id = ? LIMIT 1",
+      [id]
+    );
+
+    if (existing.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Client introuvable." });
     }
 
-    return res.status(200).json({ message: "Client supprimé avec succès." });
+    // Force delete: remove related reservations first (FK constraint)
+    await connection.query("DELETE FROM reservations WHERE client_id = ?", [id]);
+    await connection.query("DELETE FROM clients WHERE id = ?", [id]);
+
+    await connection.commit();
+
+    return res.status(200).json({
+      message: "Client et réservations associées supprimés avec succès.",
+    });
   } catch (error) {
+    await connection.rollback();
     console.error("Error deleting client:", error);
-    return res.status(500).json({ message: "Unable to delete client." });
+    return res.status(500).json({ message: "Impossible de supprimer le client." });
+  } finally {
+    connection.release();
   }
 }
 

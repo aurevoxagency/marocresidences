@@ -1,5 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Eye, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CheckCircle2,
+  Download,
+  Eye,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 
 import {
   AlertDialog,
@@ -63,6 +72,7 @@ import {
   calculateChambreStayTotal,
   calculateBebeStayTotal,
   calculateEnfantStayTotal,
+  calculateEnfantsStayTotalFromAges,
   calculateSupplementStayTotal,
   findTrancheTarifForAge,
   getBebeTranche,
@@ -71,10 +81,14 @@ import {
   calculateReservationTotals,
   createReservation,
   deleteReservation,
+  fetchReservation,
   fetchReservations,
+  resolveTrancheAgeId,
   updateReservation,
   type Reservation,
   type ReservationFormData,
+  type ReservationOccupantFormData,
+  type ReservationOccupantType,
   type ReservationSource,
   type ReservationStatut,
   type ReservationStatutPaiement,
@@ -138,16 +152,16 @@ function getEnfantsPriceTotal(
   chambreId: string,
   nights: number,
   chambreList: ChambreListItem[],
-  ageEnfant?: number,
+  ages: number[],
   promotion?: PromotionDiscount | null
 ) {
   const chambre = chambreList.find((item) => String(item.id) === chambreId);
 
-  if (!chambre) {
-    return null;
+  if (!chambre || ages.length === 0) {
+    return ages.length === 0 ? 0 : null;
   }
 
-  return calculateEnfantStayTotal(chambre, nights, ageEnfant, promotion);
+  return calculateEnfantsStayTotalFromAges(chambre, nights, ages, promotion);
 }
 
 function getBebePriceTotal(
@@ -185,17 +199,14 @@ function applyChambrePricing(
     nb_adultes?: number;
     nbrs_enfants?: number;
     nbrs_bebe?: number;
-    age_enfant?: number;
+    enfant_ages?: number[];
   },
   promotion?: PromotionDiscount | null
 ) {
   const nbAdultes = Math.max(1, counts?.nb_adultes ?? 1);
   const nbrsEnfants = Math.max(0, counts?.nbrs_enfants ?? 0);
   const nbrsBebe = Math.max(0, counts?.nbrs_bebe ?? 0);
-  const ageEnfant =
-    nbrsEnfants > 0 && counts?.age_enfant != null && counts.age_enfant >= 0
-      ? counts.age_enfant
-      : undefined;
+  const enfantAges = (counts?.enfant_ages || []).filter((age) => age >= 0);
 
   return {
     prix_chambre_total: scalePriceByCount(
@@ -206,11 +217,100 @@ function applyChambrePricing(
       getBebePriceTotal(chambreId, nights, chambreList, promotion),
       nbrsBebe
     ),
-    prix_enfants_total: scalePriceByCount(
-      getEnfantsPriceTotal(chambreId, nights, chambreList, ageEnfant, promotion),
-      nbrsEnfants
-    ),
+    prix_enfants_total:
+      nbrsEnfants > 0
+        ? getEnfantsPriceTotal(chambreId, nights, chambreList, enfantAges, promotion)
+        : 0,
   };
+}
+
+type OccupantFormState = {
+  key: string;
+  type_occupant: ReservationOccupantType;
+  nom: string;
+  prenom: string;
+  age_enfant: string;
+  tranche_age_id: string;
+};
+
+function emptyOccupant(
+  type: ReservationOccupantType,
+  index: number,
+  seed?: Partial<OccupantFormState>
+): OccupantFormState {
+  return {
+    key: `${type}-${index}-${seed?.key || "new"}`,
+    type_occupant: type,
+    nom: seed?.nom || "",
+    prenom: seed?.prenom || "",
+    age_enfant: seed?.age_enfant || "",
+    tranche_age_id: seed?.tranche_age_id || "",
+  };
+}
+
+function buildOccupantsFromCounts(
+  nbAdultes: number,
+  nbrsEnfants: number,
+  nbrsBebe: number,
+  existing: OccupantFormState[] = []
+) {
+  const adults = existing.filter((item) => item.type_occupant === "adulte");
+  const children = existing.filter((item) => item.type_occupant === "enfant");
+  const babies = existing.filter((item) => item.type_occupant === "bebe");
+  const next: OccupantFormState[] = [];
+
+  for (let index = 0; index < nbAdultes; index += 1) {
+    next.push(emptyOccupant("adulte", index, adults[index]));
+  }
+
+  for (let index = 0; index < nbrsEnfants; index += 1) {
+    next.push(emptyOccupant("enfant", index, children[index]));
+  }
+
+  for (let index = 0; index < nbrsBebe; index += 1) {
+    next.push(emptyOccupant("bebe", index, babies[index]));
+  }
+
+  return next;
+}
+
+function occupantsFromReservation(
+  reservation: Reservation,
+  tranches: TrancheAge[]
+): OccupantFormState[] {
+  if (reservation.occupants && reservation.occupants.length > 0) {
+    return reservation.occupants.map((occupant, index) =>
+      emptyOccupant(occupant.type_occupant, index, {
+        key: String(occupant.id ?? index),
+        nom: occupant.nom || "",
+        prenom: occupant.prenom || "",
+        age_enfant:
+          occupant.age_enfant != null && occupant.age_enfant >= 0
+            ? String(occupant.age_enfant)
+            : "",
+        tranche_age_id: occupant.tranche_age_id ? String(occupant.tranche_age_id) : "",
+      })
+    );
+  }
+
+  const seededChildren =
+    reservation.nbrs_enfants > 0 && reservation.age_enfant
+      ? Array.from({ length: reservation.nbrs_enfants }, (_, index) =>
+          emptyOccupant("enfant", index, {
+            age_enfant: String(reservation.age_enfant),
+            tranche_age_id: String(
+              resolveTrancheAgeId(tranches, reservation.age_enfant) || ""
+            ),
+          })
+        )
+      : [];
+
+  return buildOccupantsFromCounts(
+    reservation.nb_adultes,
+    reservation.nbrs_enfants,
+    reservation.nbrs_bebe,
+    seededChildren
+  );
 }
 
 const SOURCE_LABELS: Record<ReservationSource, string> = {
@@ -247,7 +347,6 @@ type FormState = {
   nb_adultes: string;
   nbrs_enfants: string;
   nbrs_bebe: string;
-  age_enfant: string;
   source: ReservationSource;
   promotion_id: string;
   supplement_id: string;
@@ -272,7 +371,6 @@ function emptyForm(maisonId = ""): FormState {
     nb_adultes: "1",
     nbrs_enfants: "0",
     nbrs_bebe: "0",
-    age_enfant: "",
     source: "autre",
     promotion_id: "",
     supplement_id: "",
@@ -311,10 +409,6 @@ function toFormState(reservation: Reservation): FormState {
     nb_adultes: String(reservation.nb_adultes),
     nbrs_enfants: String(reservation.nbrs_enfants ?? 0),
     nbrs_bebe: String(reservation.nbrs_bebe ?? 0),
-    age_enfant:
-      reservation.nbrs_enfants && reservation.age_enfant
-        ? String(reservation.age_enfant)
-        : "",
     source: reservation.source,
     promotion_id: reservation.promotion_id ? String(reservation.promotion_id) : "",
     supplement_id: reservation.supplement_id ? String(reservation.supplement_id) : "",
@@ -394,8 +488,12 @@ export function ReservationsManagement() {
   const [filterMaison, setFilterMaison] = useState("all");
   const [filterStatut, setFilterStatut] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [formStep, setFormStep] = useState<"details" | "occupants">("details");
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
+  const [occupants, setOccupants] = useState<OccupantFormState[]>(() =>
+    buildOccupantsFromCounts(1, 0, 0)
+  );
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Reservation | null>(null);
@@ -405,6 +503,10 @@ export function ReservationsManagement() {
   const [viewMaison, setViewMaison] = useState<MaisonDetail | null>(null);
   const [loadingViewSheet, setLoadingViewSheet] = useState(false);
   const [downloadingPdfId, setDownloadingPdfId] = useState<number | null>(null);
+  const [showConfirmFloatingBtn, setShowConfirmFloatingBtn] = useState(false);
+  const [confirmingReservation, setConfirmingReservation] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<Reservation | null>(null);
+  const viewSheetScrollRef = useRef<HTMLDivElement | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -497,7 +599,15 @@ export function ReservationsManagement() {
   const nbAdultes = Math.max(1, Number(form.nb_adultes) || 1);
   const nbrsEnfants = Math.max(0, Number(form.nbrs_enfants) || 0);
   const nbrsBebe = Math.max(0, Number(form.nbrs_bebe) || 0);
-  const ageEnfant = form.age_enfant ? Number(form.age_enfant) : undefined;
+  const enfantAges = useMemo(
+    () =>
+      occupants
+        .filter((item) => item.type_occupant === "enfant" && item.age_enfant !== "")
+        .map((item) => Number(item.age_enfant))
+        .filter((age) => Number.isFinite(age) && age >= 0),
+    [occupants]
+  );
+  const ageEnfant = enfantAges[0];
 
   const selectedChambre = useMemo(
     () => chambres.find((item) => String(item.id) === form.chambre_id),
@@ -590,7 +700,7 @@ export function ReservationsManagement() {
         nb_adultes: nbAdultes,
         nbrs_enfants: nbrsEnfants,
         nbrs_bebe: nbrsBebe,
-        age_enfant: ageEnfant,
+        enfant_ages: enfantAges,
       },
       selectedPromotion
     );
@@ -630,7 +740,7 @@ export function ReservationsManagement() {
     form.nb_adultes,
     form.nbrs_enfants,
     form.nbrs_bebe,
-    form.age_enfant,
+    enfantAges,
     form.promotion_id,
     nbNuits,
     chambres,
@@ -680,15 +790,27 @@ export function ReservationsManagement() {
   const openCreate = () => {
     setEditingReservation(null);
     setForm(emptyForm(maisons[0] ? String(maisons[0].id) : ""));
+    setOccupants(buildOccupantsFromCounts(1, 0, 0));
+    setFormStep("details");
     setFormError("");
     setDialogOpen(true);
   };
 
-  const openEdit = (reservation: Reservation) => {
+  const openEdit = async (reservation: Reservation) => {
     setEditingReservation(reservation);
     setForm(toFormState(reservation));
+    setFormStep("details");
     setFormError("");
     setDialogOpen(true);
+
+    try {
+      const detailed = await fetchReservation(reservation.id);
+      setEditingReservation(detailed);
+      setForm(toFormState(detailed));
+      setOccupants(occupantsFromReservation(detailed, tranchesAge));
+    } catch {
+      setOccupants(occupantsFromReservation(reservation, tranchesAge));
+    }
   };
 
   const buildMaisonFallback = (maisonId: number): MaisonDetail | null => {
@@ -728,12 +850,106 @@ export function ReservationsManagement() {
     setViewSheetOpen(true);
     setLoadingViewSheet(true);
     setViewMaison(null);
+    setShowConfirmFloatingBtn(false);
 
     try {
-      const maison = await loadMaisonForReservation(reservation.maison_id);
+      const [detailed, maison] = await Promise.all([
+        fetchReservation(reservation.id),
+        loadMaisonForReservation(reservation.maison_id),
+      ]);
+      setViewReservation(detailed);
+      setViewMaison(maison);
+    } catch {
+      const maison = await loadMaisonForReservation(reservation.maison_id).catch(() => null);
       setViewMaison(maison);
     } finally {
       setLoadingViewSheet(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!viewSheetOpen) {
+      setShowConfirmFloatingBtn(false);
+      return;
+    }
+
+    const node = viewSheetScrollRef.current;
+
+    if (!node) {
+      return;
+    }
+
+    const handleScroll = () => {
+      setShowConfirmFloatingBtn(node.scrollTop > 120);
+    };
+
+    handleScroll();
+    node.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      node.removeEventListener("scroll", handleScroll);
+    };
+  }, [viewSheetOpen, loadingViewSheet, viewReservation?.id]);
+
+  const confirmReservation = async () => {
+    if (!confirmTarget) {
+      return;
+    }
+
+    setConfirmingReservation(true);
+    setErrorMessage("");
+
+    try {
+      const detailed = await fetchReservation(confirmTarget.id);
+      const updated = await updateReservation(confirmTarget.id, {
+        client_id: detailed.client_id,
+        maison_id: detailed.maison_id,
+        chambre_id: detailed.chambre_id,
+        date_arrivee: String(detailed.date_arrivee).slice(0, 10),
+        date_depart: String(detailed.date_depart).slice(0, 10),
+        nb_adultes: detailed.nb_adultes,
+        nbrs_enfants: detailed.nbrs_enfants,
+        nbrs_bebe: detailed.nbrs_bebe,
+        age_enfant: detailed.age_enfant,
+        source: detailed.source,
+        promotion_id: detailed.promotion_id,
+        supplement_id: detailed.supplement_id,
+        prix_chambre_total: Number(detailed.prix_chambre_total) || 0,
+        prix_bebe_total: Number(detailed.prix_bebe_total) || 0,
+        prix_enfants_total: Number(detailed.prix_enfants_total) || 0,
+        montant_reduction: Number(detailed.montant_reduction) || 0,
+        taux_tva_applique: Number(detailed.taux_tva_applique) || 0,
+        prix_total_ht: Number(detailed.prix_total_ht) || 0,
+        montant_tva: Number(detailed.montant_tva) || 0,
+        prix_total_ttc: Number(detailed.prix_total_ttc) || 0,
+        statut_reservation: "confirmee",
+        statut_paiement: detailed.statut_paiement,
+        montant_paye: Number(detailed.montant_paye) || 0,
+        notes: detailed.notes,
+        occupants: (detailed.occupants || []).map((occupant) => ({
+          type_occupant: occupant.type_occupant,
+          nom: occupant.nom,
+          prenom: occupant.prenom,
+          age_enfant: occupant.age_enfant,
+          tranche_age_id: occupant.tranche_age_id,
+          date_naissance: occupant.date_naissance ?? null,
+          piece_identite: occupant.piece_identite ?? null,
+          allergies_regime: occupant.allergies_regime ?? null,
+          prix_unitaire: Number(occupant.prix_unitaire) || 0,
+          prix_total: Number(occupant.prix_total) || 0,
+        })),
+      });
+
+      setViewReservation(updated);
+      setConfirmTarget(null);
+      await loadData();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Impossible de confirmer la réservation."
+      );
+      setConfirmTarget(null);
+    } finally {
+      setConfirmingReservation(false);
     }
   };
 
@@ -762,7 +978,7 @@ export function ReservationsManagement() {
         nb_adultes: nbAdultes,
         nbrs_enfants: nbrsEnfants,
         nbrs_bebe: nbrsBebe,
-        age_enfant: ageEnfant,
+        enfant_ages: enfantAges,
       },
       selectedPromotion
     );
@@ -785,41 +1001,166 @@ export function ReservationsManagement() {
     }));
   };
 
-  const buildPayload = (): ReservationFormData | null => {
-    const clientId = Number(form.client_id);
-    const maisonId = Number(form.maison_id);
-    const chambreId = Number(form.chambre_id);
+  const updateOccupant = (key: string, patch: Partial<OccupantFormState>) => {
+    setOccupants((current) =>
+      current.map((item) => (item.key === key ? { ...item, ...patch } : item))
+    );
+  };
 
-    if (!clientId || !maisonId || !chambreId) {
+  const validateDetailsStep = () => {
+    if (!form.client_id || !form.maison_id || !form.chambre_id) {
       setFormError("Client, maison et chambre sont requis.");
-      return null;
+      return false;
     }
 
     if (!form.date_arrivee || !form.date_depart) {
       setFormError("Les dates d'arrivée et de départ sont requises.");
-      return null;
+      return false;
     }
 
     if (nbNuits <= 0) {
       setFormError("La date de départ doit être après la date d'arrivée.");
+      return false;
+    }
+
+    return true;
+  };
+
+  const goToOccupantsStep = () => {
+    setFormError("");
+
+    if (!validateDetailsStep()) {
+      return;
+    }
+
+    const selectedClient = clients.find((client) => String(client.id) === form.client_id);
+    const clientNom = selectedClient?.nom?.trim() || "";
+    const clientPrenom = selectedClient?.prenom?.trim() || "";
+
+    setOccupants((current) => {
+      const next = buildOccupantsFromCounts(nbAdultes, nbrsEnfants, nbrsBebe, current);
+
+      return next.map((occupant, index) => {
+        if (occupant.type_occupant !== "adulte") {
+          return occupant;
+        }
+
+        const adultIndex = next
+          .slice(0, index + 1)
+          .filter((item) => item.type_occupant === "adulte").length;
+
+        // Adulte 1 = client principal
+        if (adultIndex === 1) {
+          return {
+            ...occupant,
+            nom: occupant.nom.trim() || clientNom,
+            prenom: occupant.prenom.trim() || clientPrenom,
+          };
+        }
+
+        return occupant;
+      });
+    });
+    setFormStep("occupants");
+  };
+
+  const buildOccupantsPayload = (): ReservationOccupantFormData[] | null => {
+    const synced = buildOccupantsFromCounts(nbAdultes, nbrsEnfants, nbrsBebe, occupants);
+
+    for (const occupant of synced) {
+      if (!occupant.nom.trim() || !occupant.prenom.trim()) {
+        setFormError("Chaque occupant doit avoir un nom et un prénom.");
+        return null;
+      }
+
+      if (occupant.type_occupant === "enfant") {
+        if (!occupant.age_enfant) {
+          setFormError("Sélectionnez l'âge de chaque enfant.");
+          return null;
+        }
+
+        const age = Number(occupant.age_enfant);
+        const trancheId =
+          Number(occupant.tranche_age_id) || resolveTrancheAgeId(tranchesAge, age);
+
+        if (!trancheId) {
+          setFormError(`Aucune tranche d'âge trouvée pour ${age} an(s).`);
+          return null;
+        }
+      }
+    }
+
+    return synced.map((occupant) => {
+      const age =
+        occupant.type_occupant === "enfant" ? Number(occupant.age_enfant) : null;
+      const trancheId =
+        occupant.type_occupant === "enfant"
+          ? Number(occupant.tranche_age_id) ||
+            resolveTrancheAgeId(tranchesAge, age ?? -1)
+          : null;
+
+      let prixUnitaire = 0;
+
+      if (selectedChambre && occupant.type_occupant === "adulte") {
+        prixUnitaire =
+          calculateChambreStayTotal(
+            selectedChambre.prix_adulte,
+            Math.max(nbNuits, 1),
+            selectedPromotion
+          ) ?? 0;
+      } else if (selectedChambre && occupant.type_occupant === "enfant" && age != null) {
+        prixUnitaire =
+          calculateEnfantStayTotal(
+            selectedChambre,
+            Math.max(nbNuits, 1),
+            age,
+            selectedPromotion
+          ) ?? 0;
+      } else if (selectedChambre && occupant.type_occupant === "bebe") {
+        prixUnitaire =
+          calculateBebeStayTotal(
+            selectedChambre,
+            Math.max(nbNuits, 1),
+            selectedPromotion
+          ) ?? 0;
+      }
+
+      return {
+        type_occupant: occupant.type_occupant,
+        nom: occupant.nom.trim(),
+        prenom: occupant.prenom.trim(),
+        age_enfant: age,
+        tranche_age_id: trancheId,
+        prix_unitaire: prixUnitaire,
+        prix_total: prixUnitaire,
+      };
+    });
+  };
+
+  const buildPayload = (): ReservationFormData | null => {
+    if (!validateDetailsStep()) {
       return null;
     }
 
-    if (nbrsEnfants > 0 && !form.age_enfant) {
-      setFormError("Sélectionnez l'âge de l'enfant.");
+    const occupantsPayload = buildOccupantsPayload();
+
+    if (!occupantsPayload) {
       return null;
     }
+
+    const firstChildAge =
+      occupantsPayload.find((item) => item.type_occupant === "enfant")?.age_enfant ?? 0;
 
     return {
-      client_id: clientId,
-      maison_id: maisonId,
-      chambre_id: chambreId,
+      client_id: Number(form.client_id),
+      maison_id: Number(form.maison_id),
+      chambre_id: Number(form.chambre_id),
       date_arrivee: form.date_arrivee,
       date_depart: form.date_depart,
-      nb_adultes: Number(form.nb_adultes) || 1,
-      nbrs_enfants: Math.max(0, Number(form.nbrs_enfants) || 0),
-      nbrs_bebe: Math.max(0, Number(form.nbrs_bebe) || 0),
-      age_enfant: nbrsEnfants > 0 ? Number(form.age_enfant) : 0,
+      nb_adultes: nbAdultes,
+      nbrs_enfants: nbrsEnfants,
+      nbrs_bebe: nbrsBebe,
+      age_enfant: firstChildAge || 0,
       source: form.source,
       promotion_id: form.promotion_id ? Number(form.promotion_id) : null,
       supplement_id: form.supplement_id ? Number(form.supplement_id) : null,
@@ -833,6 +1174,7 @@ export function ReservationsManagement() {
       statut_paiement: form.statut_paiement,
       montant_paye: Number(form.montant_paye) || 0,
       notes: form.notes.trim() || null,
+      occupants: occupantsPayload,
     };
   };
 
@@ -849,12 +1191,16 @@ export function ReservationsManagement() {
     try {
       if (editingReservation) {
         await updateReservation(editingReservation.id, payload);
+        setDialogOpen(false);
+        setFormStep("details");
+        await loadData();
       } else {
-        await createReservation(payload);
+        const created = await createReservation(payload);
+        setDialogOpen(false);
+        setFormStep("details");
+        await loadData();
+        await openViewSheet(created);
       }
-
-      setDialogOpen(false);
-      await loadData();
     } catch (error) {
       setFormError(
         error instanceof Error ? error.message : "Impossible d'enregistrer la réservation."
@@ -1020,7 +1366,7 @@ export function ReservationsManagement() {
                             ? "Génération PDF..."
                             : "Télécharger fiche PDF"}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEdit(reservation)}>
+                        <DropdownMenuItem onClick={() => void openEdit(reservation)}>
                           <Pencil className="h-4 w-4" />
                           Modifier
                         </DropdownMenuItem>
@@ -1042,7 +1388,16 @@ export function ReservationsManagement() {
         </Table>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setFormStep("details");
+            setFormError("");
+          }
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>
@@ -1050,8 +1405,14 @@ export function ReservationsManagement() {
                 ? `Modifier ${editingReservation.reference}`
                 : "Nouvelle réservation"}
             </DialogTitle>
+            <p className="text-[13px] text-slate-500">
+              {formStep === "details"
+                ? "Étape 1/2 — Détails du séjour"
+                : "Étape 2/2 — Occupants (noms et âges)"}
+            </p>
           </DialogHeader>
 
+          {formStep === "details" ? (
           <div className="space-y-6">
             <section className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-800">Séjour</h3>
@@ -1186,11 +1547,13 @@ export function ReservationsManagement() {
                       setForm((current) => ({
                         ...current,
                         nbrs_enfants: value,
-                        age_enfant: Number(value) > 0 ? current.age_enfant : "",
                         prix_enfants_total: Number(value) > 0 ? current.prix_enfants_total : "0",
                       }));
                     }}
                   />
+                  <p className="text-[11px] text-slate-500">
+                    Les noms et âges seront saisis à l&apos;étape suivante.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -1208,40 +1571,6 @@ export function ReservationsManagement() {
                     }
                   />
                 </div>
-
-                {nbrsEnfants > 0 ? (
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>Âge de l&apos;enfant *</Label>
-                    <Select
-                      value={form.age_enfant || undefined}
-                      onValueChange={(value) =>
-                        setForm((current) => ({ ...current, age_enfant: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner l'âge" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {enfantAgeOptions.length > 0 ? (
-                          enfantAgeOptions.map((option) => (
-                            <SelectItem key={option.age} value={String(option.age)}>
-                              {option.label}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="none" disabled>
-                            Aucune tranche enfant pour cette chambre
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {!form.chambre_id ? (
-                      <p className="text-[11px] text-slate-500">
-                        Sélectionnez une chambre pour voir les tranches d&apos;âge disponibles.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
 
                 <div className="space-y-2">
                   <Label>Source</Label>
@@ -1405,29 +1734,22 @@ export function ReservationsManagement() {
                           return "Indiquez un nombre d'enfants pour calculer ce tarif.";
                         }
 
-                        if (!form.age_enfant || !selectedChambre) {
-                          return "Sélectionnez l'âge de l'enfant pour appliquer la tranche tarifaire.";
+                        if (enfantAges.length === 0 || !selectedChambre) {
+                          return "Les âges des enfants seront définis à l'étape Occupants.";
                         }
 
                         const bebeTranche = getBebeTranche(selectedChambre);
                         const autresEnfants = (selectedChambre.tarifs_enfant || []).filter(
                           (tarif) => tarif !== bebeTranche
                         );
-                        const tranche = findTrancheTarifForAge(
-                          autresEnfants,
-                          Number(form.age_enfant)
-                        );
-                        const nightly = tranche
-                          ? calculateChambreStayTotal(
-                              tranche.prix,
-                              1,
-                              selectedPromotion
-                            )
-                          : null;
+                        const labels = enfantAges.map((age) => {
+                          const tranche = findTrancheTarifForAge(autresEnfants, age);
+                          return tranche
+                            ? `${age} an${age > 1 ? "s" : ""} · ${tranche.tranche_nom}`
+                            : `${age} an${age > 1 ? "s" : ""}`;
+                        });
 
-                        return tranche && nightly != null && nightly > 0
-                          ? `Tranche ${tranche.tranche_nom} · ${nightly.toLocaleString("fr-FR")} MAD/nuit × ${nbrsEnfants}${selectedPromotion ? " (promo)" : ""}`
-                          : "Aucun tarif enfant pour cet âge sur cette chambre.";
+                        return `Âges saisis : ${labels.join(", ")}${selectedPromotion ? " (promo)" : ""}`;
                       })()}
                     </p>
                   ) : null}
@@ -1538,14 +1860,284 @@ export function ReservationsManagement() {
 
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           </div>
+          ) : (
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-800">Adultes ({nbAdultes})</h3>
+              <div className="space-y-3">
+                {occupants
+                  .filter((item) => item.type_occupant === "adulte")
+                  .map((occupant, index) => (
+                    <div
+                      key={occupant.key}
+                      className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                    >
+                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
+                          <span>Adulte {index + 1}</span>
+                          <span className="font-medium text-slate-700">
+                            {formatMoney(
+                              selectedChambre
+                                ? calculateChambreStayTotal(
+                                    selectedChambre.prix_adulte,
+                                    Math.max(nbNuits, 1),
+                                    selectedPromotion
+                                  )
+                                : Number(form.prix_chambre_total) / Math.max(nbAdultes, 1)
+                            )}
+                          </span>
+                        </p>
+                      <div className="space-y-2">
+                        <Label>Prénom *</Label>
+                        <Input
+                          value={occupant.prenom}
+                          onChange={(e) =>
+                            updateOccupant(occupant.key, { prenom: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Nom *</Label>
+                        <Input
+                          value={occupant.nom}
+                          onChange={(e) =>
+                            updateOccupant(occupant.key, { nom: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </section>
+
+            {nbrsEnfants > 0 ? (
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-800">Enfants ({nbrsEnfants})</h3>
+                <div className="space-y-3">
+                  {occupants
+                    .filter((item) => item.type_occupant === "enfant")
+                    .map((occupant, index) => (
+                      <div
+                        key={occupant.key}
+                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                      >
+                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
+                          <span>Enfant {index + 1}</span>
+                          <span className="font-medium text-slate-700">
+                            {occupant.age_enfant && selectedChambre
+                              ? formatMoney(
+                                  calculateEnfantStayTotal(
+                                    selectedChambre,
+                                    Math.max(nbNuits, 1),
+                                    Number(occupant.age_enfant),
+                                    selectedPromotion
+                                  )
+                                )
+                              : "—"}
+                          </span>
+                        </p>
+                        <div className="space-y-2">
+                          <Label>Prénom *</Label>
+                          <Input
+                            value={occupant.prenom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { prenom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nom *</Label>
+                          <Input
+                            value={occupant.nom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { nom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label>Âge de l&apos;enfant *</Label>
+                          <Select
+                            value={occupant.age_enfant || undefined}
+                            onValueChange={(value) => {
+                              const age = Number(value);
+                              const trancheId = resolveTrancheAgeId(tranchesAge, age);
+                              updateOccupant(occupant.key, {
+                                age_enfant: value,
+                                tranche_age_id: trancheId ? String(trancheId) : "",
+                              });
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Sélectionner l'âge" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {enfantAgeOptions.length > 0 ? (
+                                enfantAgeOptions.map((option) => (
+                                  <SelectItem key={option.age} value={String(option.age)}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="none" disabled>
+                                  Aucune tranche enfant pour cette chambre
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {occupant.age_enfant ? (
+                            <p className="text-[11px] text-slate-500">
+                              {(() => {
+                                const age = Number(occupant.age_enfant);
+                                const tranche = tranchesAge.find(
+                                  (item) =>
+                                    Number(occupant.tranche_age_id) === item.id ||
+                                    (age >= item.age_min && age <= item.age_max)
+                                );
+                                return tranche
+                                  ? `Tranche : ${tranche.nom} (${tranche.age_min}-${tranche.age_max} ans)`
+                                  : "Tranche d'âge non trouvée pour cet âge.";
+                              })()}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            ) : null}
+
+            {nbrsBebe > 0 ? (
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-800">Bébés ({nbrsBebe})</h3>
+                <div className="space-y-3">
+                  {occupants
+                    .filter((item) => item.type_occupant === "bebe")
+                    .map((occupant, index) => (
+                      <div
+                        key={occupant.key}
+                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                      >
+                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
+                          <span>Bébé {index + 1}</span>
+                          <span className="font-medium text-slate-700">
+                            {formatMoney(
+                              selectedChambre
+                                ? calculateBebeStayTotal(
+                                    selectedChambre,
+                                    Math.max(nbNuits, 1),
+                                    selectedPromotion
+                                  )
+                                : Number(form.prix_bebe_total) / Math.max(nbrsBebe, 1)
+                            )}
+                          </span>
+                        </p>
+                        <div className="space-y-2">
+                          <Label>Prénom *</Label>
+                          <Input
+                            value={occupant.prenom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { prenom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nom *</Label>
+                          <Input
+                            value={occupant.nom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { nom: e.target.value })
+                            }
+                          />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] text-slate-700">
+              <h3 className="mb-2 text-sm font-semibold text-slate-800">Récapitulatif tarifaire</h3>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Nombre de nuits</span>
+                  <span>{nbNuits || "—"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Adultes ({nbAdultes})</span>
+                  <span>{formatMoney(form.prix_chambre_total)}</span>
+                </div>
+                {nbrsEnfants > 0 ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Enfants ({nbrsEnfants})</span>
+                    <span>{formatMoney(form.prix_enfants_total)}</span>
+                  </div>
+                ) : null}
+                {nbrsBebe > 0 ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Bébés ({nbrsBebe})</span>
+                    <span>{formatMoney(form.prix_bebe_total)}</span>
+                  </div>
+                ) : null}
+                {supplementTotal > 0 ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Supplément</span>
+                    <span>{formatMoney(supplementTotal)}</span>
+                  </div>
+                ) : null}
+                {Number(form.montant_reduction) > 0 ? (
+                  <div className="flex items-center justify-between gap-3 text-emerald-700">
+                    <span>Réduction</span>
+                    <span>- {formatMoney(form.montant_reduction)}</span>
+                  </div>
+                ) : null}
+                <div className="mt-2 border-t border-slate-200 pt-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Total HT</span>
+                    <span>{formatMoney(computedTotals.prix_total_ht)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>TVA ({form.taux_tva_applique}%)</span>
+                    <span>{formatMoney(computedTotals.montant_tva)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[15px] font-semibold text-slate-900">
+                    <span>Total TTC</span>
+                    <span>{formatMoney(computedTotals.prix_total_ttc)}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          </div>
+          )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Annuler
-            </Button>
-            <Button onClick={() => void saveReservation()} disabled={saving}>
-              {saving ? "Enregistrement…" : editingReservation ? "Mettre à jour" : "Créer"}
-            </Button>
+            {formStep === "details" ? (
+              <>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  Annuler
+                </Button>
+                <Button onClick={goToOccupantsStep}>Suivant</Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFormError("");
+                    setFormStep("details");
+                  }}
+                >
+                  Retour
+                </Button>
+                <Button onClick={() => void saveReservation()} disabled={saving}>
+                  {saving
+                    ? "Enregistrement…"
+                    : editingReservation
+                      ? "Mettre à jour"
+                      : "Créer"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1558,6 +2150,8 @@ export function ReservationsManagement() {
           if (!open) {
             setViewReservation(null);
             setViewMaison(null);
+            setShowConfirmFloatingBtn(false);
+            setConfirmTarget(null);
           }
         }}
       >
@@ -1567,7 +2161,8 @@ export function ReservationsManagement() {
               Chargement de la fiche...
             </div>
           ) : viewReservation ? (
-            <div className="max-h-[92vh] overflow-y-auto">
+            <div className="relative max-h-[92vh]">
+            <div ref={viewSheetScrollRef} className="max-h-[92vh] overflow-y-auto">
               <div className="relative h-52 w-full overflow-hidden bg-slate-900 sm:h-60">
                 {viewMaison && getMaisonHeroPhoto(viewMaison) ? (
                   <img
@@ -1640,19 +2235,40 @@ export function ReservationsManagement() {
 
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-900">Voyageurs</h3>
-                  <div className="grid gap-4 rounded-2xl border border-slate-200 p-4 sm:grid-cols-4">
+                  <div className="grid gap-4 rounded-2xl border border-slate-200 p-4 sm:grid-cols-3">
                     <FicheInfoItem label="Adultes" value={viewReservation.nb_adultes} />
                     <FicheInfoItem label="Enfants" value={viewReservation.nbrs_enfants} />
                     <FicheInfoItem label="Bébés" value={viewReservation.nbrs_bebe} />
-                    <FicheInfoItem
-                      label="Âge enfant"
-                      value={
-                        viewReservation.nbrs_enfants > 0 && viewReservation.age_enfant
-                          ? `${viewReservation.age_enfant} ans`
-                          : "—"
-                      }
-                    />
                   </div>
+                  {viewReservation.occupants && viewReservation.occupants.length > 0 ? (
+                    <div className="space-y-2 rounded-2xl border border-slate-200 p-4">
+                      {viewReservation.occupants.map((occupant, index) => (
+                        <div
+                          key={occupant.id ?? `${occupant.type_occupant}-${index}`}
+                          className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0"
+                        >
+                          <div>
+                            <p className="text-[13px] font-medium text-slate-800">
+                              {[occupant.prenom, occupant.nom].filter(Boolean).join(" ") || "—"}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {occupant.type_occupant === "adulte"
+                                ? "Adulte"
+                                : occupant.type_occupant === "enfant"
+                                  ? "Enfant"
+                                  : "Bébé"}
+                              {occupant.type_occupant === "enfant" && occupant.age_enfant != null
+                                ? ` · ${occupant.age_enfant} an${Number(occupant.age_enfant) > 1 ? "s" : ""}`
+                                : ""}
+                              {occupant.tranche_age_nom
+                                ? ` · ${occupant.tranche_age_nom}`
+                                : ""}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
 
                 <section className="space-y-3">
@@ -1747,16 +2363,59 @@ export function ReservationsManagement() {
                   type="button"
                   onClick={() => {
                     setViewSheetOpen(false);
-                    openEdit(viewReservation);
+                    void openEdit(viewReservation);
                   }}
                 >
                   Modifier la réservation
                 </Button>
               </DialogFooter>
             </div>
+
+              {showConfirmFloatingBtn &&
+              viewReservation.statut_reservation === "en_attente" ? (
+                <div className="pointer-events-none absolute inset-x-0 bottom-20 z-20 flex justify-center px-4 sm:bottom-24">
+                  <Button
+                    type="button"
+                    className="pointer-events-auto rounded-full bg-emerald-600 px-5 py-6 text-[14px] font-semibold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700"
+                    onClick={() => setConfirmTarget(viewReservation)}
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    Confirmer cette réservation
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(confirmTarget)}
+        onOpenChange={(open) => !open && setConfirmTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer cette réservation ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              La réservation « {confirmTarget?.reference} » passera au statut{" "}
+              <strong>Confirmée</strong>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={confirmingReservation}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={confirmingReservation}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmReservation();
+              }}
+            >
+              {confirmingReservation ? "Confirmation…" : "Confirmer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>

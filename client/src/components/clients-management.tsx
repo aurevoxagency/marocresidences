@@ -54,10 +54,8 @@ import {
   type ClientFormData,
   type ClientTypePiece,
 } from "@/lib/clients";
-import { fetchProspects, type Prospect } from "@/lib/prospects";
 
 type FormState = {
-  prospect_id: string;
   civilite: string;
   nom: string;
   prenom: string;
@@ -78,7 +76,6 @@ type FormState = {
 
 function emptyForm(): FormState {
   return {
-    prospect_id: "",
     civilite: "",
     nom: "",
     prenom: "",
@@ -104,7 +101,6 @@ function dateInput(value?: string | null) {
 
 function toFormState(client: Client): FormState {
   return {
-    prospect_id: client.prospect_id ? String(client.prospect_id) : "",
     civilite: client.civilite || "",
     nom: client.nom || "",
     prenom: client.prenom || "",
@@ -126,7 +122,6 @@ function toFormState(client: Client): FormState {
 
 function toPayload(form: FormState): ClientFormData {
   return {
-    prospect_id: form.prospect_id ? Number(form.prospect_id) : null,
     civilite: (form.civilite as ClientFormData["civilite"]) || "",
     nom: form.nom.trim(),
     prenom: form.prenom.trim() || undefined,
@@ -148,7 +143,6 @@ function toPayload(form: FormState): ClientFormData {
 
 export function ClientsManagement() {
   const [clients, setClients] = useState<Client[]>([]);
-  const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -167,24 +161,10 @@ export function ClientsManagement() {
     setError(null);
 
     try {
-      const [clientsResult, prospectsResult] = await Promise.allSettled([
-        fetchClients(),
-        fetchProspects(),
-      ]);
-
-      if (clientsResult.status === "fulfilled") {
-        setClients(clientsResult.value);
-      } else {
-        setError(
-          clientsResult.reason instanceof Error
-            ? clientsResult.reason.message
-            : "Impossible de charger les clients."
-        );
-      }
-
-      if (prospectsResult.status === "fulfilled") {
-        setProspects(prospectsResult.value);
-      }
+      const data = await fetchClients();
+      setClients(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible de charger les clients.");
     } finally {
       setLoading(false);
     }
@@ -218,7 +198,6 @@ export function ClientsManagement() {
         client.pays,
         client.nationalite,
         client.numero_piece,
-        client.prospect_nom,
       ]
         .filter(Boolean)
         .join(" ")
@@ -576,7 +555,7 @@ export function ClientsManagement() {
                   onChange={(e) => setForm((prev) => ({ ...prev, pays: e.target.value }))}
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="client-langue">Langue préférée</Label>
                 <Input
                   id="client-langue"
@@ -585,27 +564,6 @@ export function ClientsManagement() {
                     setForm((prev) => ({ ...prev, langue_preferee: e.target.value }))
                   }
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Prospect d&apos;origine</Label>
-                <Select
-                  value={form.prospect_id || "none"}
-                  onValueChange={(value) =>
-                    setForm((prev) => ({ ...prev, prospect_id: value === "none" ? "" : value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Prospect" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun</SelectItem>
-                    {prospects.map((prospect) => (
-                      <SelectItem key={prospect.id} value={String(prospect.id)}>
-                        {[prospect.prenom, prospect.nom].filter(Boolean).join(" ")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 
@@ -667,7 +625,7 @@ export function ClientsManagement() {
               <strong>
                 {deleteTarget?.prenom} {deleteTarget?.nom}
               </strong>{" "}
-              sera définitivement supprimé.
+              et ses réservations associées seront définitivement supprimés.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

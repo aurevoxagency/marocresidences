@@ -36,6 +36,15 @@ export type TrancheAgeFormData = {
   age_max: number;
 };
 
+export type CategorieChambre = {
+  id: number;
+  nom: string;
+};
+
+export type CategorieChambreFormData = {
+  nom: string;
+};
+
 export type TarifEnfant = {
   tranche_age_id: number;
   prix: number;
@@ -121,6 +130,19 @@ export type SupplementTarifRow = {
   description: string | null;
   statut: "actif" | "inactif";
   tarifs: TarifSupplement[];
+};
+
+export type Supplement = {
+  id: number;
+  nom: string;
+  description: string | null;
+  statut: "actif" | "inactif";
+};
+
+export type SupplementFormData = {
+  nom: string;
+  description?: string | null;
+  statut: "actif" | "inactif";
 };
 
 function authHeaders() {
@@ -232,6 +254,45 @@ export async function deleteTrancheAge(id: number) {
   await parseResponse<ApiMessage>(response);
 }
 
+export async function fetchCategoriesChambre() {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/categories-chambre`, {
+    headers: authHeaders(),
+  });
+
+  return parseResponse<CategorieChambre[]>(response);
+}
+
+export async function createCategorieChambre(data: CategorieChambreFormData) {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/categories-chambre`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  const result = await parseResponse<{ categorie: CategorieChambre }>(response);
+  return result.categorie;
+}
+
+export async function updateCategorieChambre(id: number, data: CategorieChambreFormData) {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/categories-chambre/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  const result = await parseResponse<{ categorie: CategorieChambre }>(response);
+  return result.categorie;
+}
+
+export async function deleteCategorieChambre(id: number) {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/categories-chambre/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+
+  await parseResponse<ApiMessage>(response);
+}
+
 export async function fetchChambres(maisonId: number, saisonId?: number) {
   const params = new URLSearchParams({ maison_id: String(maisonId) });
 
@@ -294,6 +355,37 @@ export async function fetchSupplementTarifs(maisonId: number) {
   );
 
   return parseResponse<{ saisons: Saison[]; supplements: SupplementTarifRow[] }>(response);
+}
+
+export async function createSupplement(data: SupplementFormData) {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/supplements`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  const result = await parseResponse<{ supplement: Supplement }>(response);
+  return result.supplement;
+}
+
+export async function updateSupplement(id: number, data: SupplementFormData) {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/supplements/${id}`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  const result = await parseResponse<{ supplement: Supplement }>(response);
+  return result.supplement;
+}
+
+export async function deleteSupplement(id: number) {
+  const response = await fetch(`${getApiBaseUrl()}/hebergement/supplements/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+
+  await parseResponse<ApiMessage>(response);
 }
 
 export async function updateSupplementTarifs(

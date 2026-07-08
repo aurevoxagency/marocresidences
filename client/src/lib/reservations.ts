@@ -24,6 +24,38 @@ export type ReservationStatutPaiement =
   | "paye_totalement"
   | "rembourse";
 
+export type ReservationOccupantType = "adulte" | "enfant" | "bebe";
+
+export type ReservationOccupant = {
+  id?: number;
+  reservation_id?: number;
+  type_occupant: ReservationOccupantType;
+  nom: string | null;
+  prenom: string | null;
+  age_enfant: number | null;
+  tranche_age_id: number | null;
+  tranche_age_nom?: string | null;
+  date_naissance?: string | null;
+  piece_identite?: string | null;
+  allergies_regime?: string | null;
+  prix_unitaire?: number | string;
+  prix_total?: number | string;
+  date_creation?: string;
+};
+
+export type ReservationOccupantFormData = {
+  type_occupant: ReservationOccupantType;
+  nom?: string | null;
+  prenom?: string | null;
+  age_enfant?: number | null;
+  tranche_age_id?: number | null;
+  date_naissance?: string | null;
+  piece_identite?: string | null;
+  allergies_regime?: string | null;
+  prix_unitaire?: number;
+  prix_total?: number;
+};
+
 export type Reservation = {
   id: number;
   reference: string;
@@ -60,6 +92,7 @@ export type Reservation = {
   chambre_nom?: string | null;
   promotion_nom?: string | null;
   supplement_nom?: string | null;
+  occupants?: ReservationOccupant[];
 };
 
 export type ReservationFormData = {
@@ -87,6 +120,7 @@ export type ReservationFormData = {
   statut_paiement?: ReservationStatutPaiement;
   montant_paye?: number;
   notes?: string | null;
+  occupants?: ReservationOccupantFormData[];
 };
 
 function authHeaders() {
@@ -191,6 +225,32 @@ export function findTrancheTarifForAge(
   age: number
 ) {
   return tarifs.find((tarif) => age >= tarif.age_min && age <= tarif.age_max);
+}
+
+export function resolveTrancheAgeId(
+  tranches: Array<{ id: number; age_min: number; age_max: number }>,
+  age: number
+) {
+  return tranches.find((tranche) => age >= tranche.age_min && age <= tranche.age_max)?.id ?? null;
+}
+
+export function calculateEnfantsStayTotalFromAges(
+  chambre: {
+    prix_enfant?: number | null;
+    tarifs_enfant?: Array<{
+      tranche_nom: string;
+      age_min: number;
+      age_max: number;
+      prix: number;
+    }>;
+  },
+  nbNuits: number,
+  ages: number[],
+  promotion?: { type_reduction: "pourcentage" | "valeur"; valeur_reduction: number } | null
+) {
+  return ages.reduce((total, age) => {
+    return total + calculateEnfantStayTotal(chambre, nbNuits, age, promotion);
+  }, 0);
 }
 
 export function getEnfantAgeOptions(chambre: {

@@ -107,6 +107,133 @@ function pickReservationFields(body = {}) {
   };
 }
 
+const OCCUPANT_TYPES = new Set(["adulte", "enfant", "bebe"]);
+
+function pickOccupants(body = {}) {
+  const raw = Array.isArray(body.occupants) ? body.occupants : [];
+
+  return raw
+    .map((item, index) => {
+      const type = OCCUPANT_TYPES.has(item?.type_occupant)
+        ? item.type_occupant
+        : null;
+
+      if (!type) {
+        return null;
+      }
+
+      const ageEnfant =
+        type === "enfant" ? Math.max(0, toIntOrDefault(item.age_enfant, -1)) : null;
+      const trancheAgeId =
+        type === "enfant" && emptyToNull(item.tranche_age_id) != null
+          ? toIntOrDefault(item.tranche_age_id, 0)
+          : null;
+
+      return {
+        type_occupant: type,
+        nom: emptyToNull(item.nom?.trim()),
+        prenom: emptyToNull(item.prenom?.trim()),
+        age_enfant: ageEnfant != null && ageEnfant >= 0 ? ageEnfant : null,
+        tranche_age_id: trancheAgeId && trancheAgeId > 0 ? trancheAgeId : null,
+        date_naissance: emptyToNull(item.date_naissance),
+        piece_identite: emptyToNull(item.piece_identite?.trim()),
+        allergies_regime: emptyToNull(item.allergies_regime?.trim()),
+        prix_unitaire: toDecimalOrDefault(item.prix_unitaire, 0),
+        prix_total: toDecimalOrDefault(item.prix_total, 0),
+        _index: index,
+      };
+    })
+    .filter(Boolean);
+}
+
+function validateOccupants(fields, occupants) {
+  const adults = occupants.filter((item) => item.type_occupant === "adulte");
+  const children = occupants.filter((item) => item.type_occupant === "enfant");
+  const babies = occupants.filter((item) => item.type_occupant === "bebe");
+
+  if (adults.length !== fields.nb_adultes) {
+    return `Le nombre d'adultes (${fields.nb_adultes}) ne correspond pas aux occupants adultes (${adults.length}).`;
+  }
+
+  if (children.length !== fields.nbrs_enfants) {
+    return `Le nombre d'enfants (${fields.nbrs_enfants}) ne correspond pas aux occupants enfants (${children.length}).`;
+  }
+
+  if (babies.length !== fields.nbrs_bebe) {
+    return `Le nombre de bébés (${fields.nbrs_bebe}) ne correspond pas aux occupants bébés (${babies.length}).`;
+  }
+
+  for (const child of children) {
+    if (child.age_enfant == null) {
+      return "Chaque enfant doit avoir un âge.";
+    }
+  }
+
+  return null;
+}
+
+async function fetchOccupants(connection, reservationId) {
+  const [rows] = await connection.query(
+    `
+      SELECT
+        o.id,
+        o.reservation_id,
+        o.type_occupant,
+        o.nom,
+        o.prenom,
+        o.age_enfant,
+        o.tranche_age_id,
+        o.date_naissance,
+        o.piece_identite,
+        o.allergies_regime,
+        o.prix_unitaire,
+        o.prix_total,
+        o.date_creation,
+        ta.nom AS tranche_age_nom
+      FROM reservation_occupants o
+      LEFT JOIN tranches_age ta ON ta.id = o.tranche_age_id
+      WHERE o.reservation_id = ?
+      ORDER BY
+        FIELD(o.type_occupant, 'adulte', 'enfant', 'bebe'),
+        o.id ASC
+    `,
+    [reservationId]
+  );
+
+  return rows;
+}
+
+async function syncReservationOccupants(connection, reservationId, occupants) {
+  await connection.query("DELETE FROM reservation_occupants WHERE reservation_id = ?", [
+    reservationId,
+  ]);
+
+  for (const occupant of occupants) {
+    await connection.query(
+      `
+        INSERT INTO reservation_occupants (
+          reservation_id, type_occupant, nom, prenom,
+          age_enfant, tranche_age_id, date_naissance, piece_identite,
+          allergies_regime, prix_unitaire, prix_total
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        reservationId,
+        occupant.type_occupant,
+        occupant.nom,
+        occupant.prenom,
+        occupant.age_enfant,
+        occupant.tranche_age_id,
+        occupant.date_naissance,
+        occupant.piece_identite,
+        occupant.allergies_regime,
+        occupant.prix_unitaire,
+        occupant.prix_total,
+      ]
+    );
+  }
+}
+
 const RESERVATION_SELECT = `
   SELECT
     r.*,
@@ -305,11 +432,13 @@ async function fetchReservationById(connection, id) {
   }
 
   const row = rows[0];
+  const occupants = await fetchOccupants(connection, id);
 
   return {
     ...row,
     client_nom: row.client_nom?.trim() || null,
     promotion_nom: row.promotion_nom || null,
+    occupants,
   };
 }
 
@@ -367,10 +496,23 @@ async function createReservation(req, res) {
 
   try {
     const fields = pickReservationFields(req.body);
+    const occupants = pickOccupants(req.body);
     const validationError = await validateReservationRelations(connection, fields);
 
     if (validationError) {
       return res.status(400).json({ message: validationError });
+    }
+
+    const occupantsError = validateOccupants(fields, occupants);
+
+    if (occupantsError) {
+      return res.status(400).json({ message: occupantsError });
+    }
+
+    // Garder age_enfant compatible (âge du premier enfant renseigné)
+    if (occupants.some((item) => item.type_occupant === "enfant")) {
+      const firstChild = occupants.find((item) => item.type_occupant === "enfant");
+      fields.age_enfant = firstChild?.age_enfant ?? 0;
     }
 
     await connection.beginTransaction();
@@ -418,6 +560,7 @@ async function createReservation(req, res) {
       ]
     );
 
+    await syncReservationOccupants(connection, result.insertId, occupants);
     await syncClientReservationStats(connection, fields.client_id);
     await connection.commit();
 
@@ -442,10 +585,24 @@ async function updateReservation(req, res) {
   try {
     const { id } = req.params;
     const fields = pickReservationFields(req.body);
+    const occupants = pickOccupants(req.body);
     const validationError = await validateReservationRelations(connection, fields, Number(id));
 
     if (validationError) {
       return res.status(400).json({ message: validationError });
+    }
+
+    const occupantsError = validateOccupants(fields, occupants);
+
+    if (occupantsError) {
+      return res.status(400).json({ message: occupantsError });
+    }
+
+    if (occupants.some((item) => item.type_occupant === "enfant")) {
+      const firstChild = occupants.find((item) => item.type_occupant === "enfant");
+      fields.age_enfant = firstChild?.age_enfant ?? 0;
+    } else {
+      fields.age_enfant = 0;
     }
 
     const [existingRows] = await connection.query(
@@ -507,6 +664,7 @@ async function updateReservation(req, res) {
       return res.status(404).json({ message: "Réservation introuvable." });
     }
 
+    await syncReservationOccupants(connection, id, occupants);
     await syncClientReservationStats(connection, fields.client_id);
 
     if (Number(previousClientId) !== Number(fields.client_id)) {

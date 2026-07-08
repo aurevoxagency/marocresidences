@@ -7,8 +7,6 @@ export type ClientTypePiece = "CIN" | "Passeport" | "Carte_sejour";
 
 export type Client = {
   id: number;
-  prospect_id: number | null;
-  prospect_nom?: string | null;
   civilite: ClientCivilite | null;
   nom: string;
   prenom: string | null;
@@ -34,7 +32,6 @@ export type Client = {
 };
 
 export type ClientFormData = {
-  prospect_id?: number | null;
   civilite?: ClientCivilite | "";
   nom: string;
   prenom?: string;

@@ -45,6 +45,17 @@ function toNumberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+const SOURCE_LABELS = {
+  site_web: "Site web",
+  reseaux_sociaux: "Réseaux sociaux",
+  booking: "Booking",
+  airbnb: "Airbnb",
+  agence: "Agence",
+  bouche_a_oreille: "Bouche à oreille",
+  walk_in: "Walk-in",
+  autre: "Autre",
+};
+
 function pickProspectFields(body = {}) {
   return {
     civilite: CIVILITES.has(body.civilite) ? body.civilite : null,
@@ -68,6 +79,67 @@ function pickProspectFields(body = {}) {
     date_dernier_contact: emptyToNull(body.date_dernier_contact),
     raison_perte: emptyToNull(body.raison_perte?.trim()),
   };
+}
+
+function formatDateOnly(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return String(value).slice(0, 10);
+}
+
+function buildClientNotesFromProspect(prospect) {
+  const lines = [];
+
+  if (prospect.notes_internes) {
+    lines.push(String(prospect.notes_internes).trim());
+  }
+
+  if (prospect.message) {
+    lines.push(`Message initial : ${String(prospect.message).trim()}`);
+  }
+
+  const details = [];
+  const sourceLabel = SOURCE_LABELS[prospect.source] || prospect.source;
+  if (sourceLabel) details.push(`Source : ${sourceLabel}`);
+  if (prospect.canal_contact) details.push(`Canal : ${prospect.canal_contact}`);
+  if (prospect.maison_nom) details.push(`Maison : ${prospect.maison_nom}`);
+
+  const arrivee = formatDateOnly(prospect.date_arrivee_souhaitee);
+  const depart = formatDateOnly(prospect.date_depart_souhaitee);
+  if (arrivee || depart) {
+    details.push(
+      `Séjour souhaité : ${arrivee || "?"} → ${depart || "?"}`
+    );
+  }
+
+  if (prospect.nb_personnes != null) {
+    details.push(`Personnes : ${prospect.nb_personnes}`);
+  }
+
+  if (prospect.budget_estime != null && prospect.budget_estime !== "") {
+    details.push(`Budget estimé : ${prospect.budget_estime}`);
+  }
+
+  if (prospect.assigne_a) {
+    details.push(`Assigné à : ${prospect.assigne_a}`);
+  }
+
+  const premierContact = formatDateOnly(prospect.date_premier_contact);
+  const dernierContact = formatDateOnly(prospect.date_dernier_contact);
+  if (premierContact) details.push(`Premier contact : ${premierContact}`);
+  if (dernierContact) details.push(`Dernier contact : ${dernierContact}`);
+
+  if (details.length > 0) {
+    lines.push(`Infos prospect :\n- ${details.join("\n- ")}`);
+  }
+
+  return lines.length > 0 ? lines.join("\n\n") : null;
 }
 
 async function getProspects(req, res) {
@@ -269,10 +341,161 @@ async function deleteProspect(req, res) {
   }
 }
 
+async function convertProspectToClient(req, res) {
+  const connection = await pool.getConnection();
+
+  try {
+    const { id } = req.params;
+
+    await connection.beginTransaction();
+
+    const [prospectRows] = await connection.query(
+      `
+        SELECT
+          p.*,
+          m.nom AS maison_nom
+        FROM prospects p
+        LEFT JOIN maisons_hotes m ON m.id = p.maison_id
+        WHERE p.id = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [id]
+    );
+
+    if (prospectRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Prospect introuvable." });
+    }
+
+    const prospect = prospectRows[0];
+
+    if (prospect.statut === "converti") {
+      await connection.rollback();
+      return res.status(409).json({
+        message: "Ce prospect est déjà converti en client.",
+      });
+    }
+
+    const civilite = CIVILITES.has(prospect.civilite) ? prospect.civilite : null;
+    const nom = String(prospect.nom || "").trim();
+    const prenom = emptyToNull(String(prospect.prenom || "").trim());
+    const email = emptyToNull(String(prospect.email || "").trim().toLowerCase());
+    const telephone = emptyToNull(String(prospect.telephone || "").trim());
+    const pays = emptyToNull(String(prospect.pays || "").trim());
+    const notesPreferences = buildClientNotesFromProspect(prospect);
+
+    if (!nom) {
+      await connection.rollback();
+      return res.status(400).json({
+        message: "Le prospect doit avoir un nom pour être converti.",
+      });
+    }
+
+    if (email) {
+      const [existingByEmail] = await connection.query(
+        "SELECT id FROM clients WHERE email = ? LIMIT 1",
+        [email]
+      );
+
+      if (existingByEmail.length > 0) {
+        await connection.rollback();
+        return res.status(409).json({
+          message: "Un client avec le même email existe déjà.",
+        });
+      }
+    }
+
+    const [insertResult] = await connection.query(
+      `
+        INSERT INTO clients (
+          civilite, nom, prenom, date_naissance, nationalite,
+          type_piece, numero_piece, email, telephone, adresse, ville, pays,
+          langue_preferee, allergies_regime, notes_preferences,
+          is_vip, nb_reservations_total, montant_total_depense,
+          date_premiere_reservation, date_derniere_reservation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        civilite,
+        nom,
+        prenom,
+        null,
+        null,
+        null,
+        null,
+        email,
+        telephone,
+        null,
+        null,
+        pays,
+        null,
+        null,
+        notesPreferences,
+        0,
+        0,
+        0,
+        null,
+        null,
+      ]
+    );
+
+    await connection.query(
+      "UPDATE prospects SET statut = 'converti' WHERE id = ?",
+      [id]
+    );
+
+    const [clientRows] = await connection.query(
+      "SELECT * FROM clients WHERE id = ? LIMIT 1",
+      [insertResult.insertId]
+    );
+
+    const [updatedProspectRows] = await connection.query(
+      `
+        SELECT
+          p.*,
+          m.nom AS maison_nom
+        FROM prospects p
+        LEFT JOIN maisons_hotes m ON m.id = p.maison_id
+        WHERE p.id = ?
+        LIMIT 1
+      `,
+      [id]
+    );
+
+    await connection.commit();
+
+    return res.status(201).json({
+      message: "Prospect converti en client avec succès.",
+      client: {
+        ...clientRows[0],
+        is_vip: Boolean(clientRows[0].is_vip),
+      },
+      prospect: updatedProspectRows[0],
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error converting prospect:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        message: "Un client avec ces informations existe déjà.",
+      });
+    }
+
+    return res.status(500).json({
+      message: "Impossible de convertir le prospect en client.",
+    });
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   getProspects,
   getProspectById,
   createProspect,
   updateProspect,
   deleteProspect,
+  convertProspectToClient,
 };
