@@ -25,6 +25,8 @@ const STATUTS_PAIEMENT = new Set([
   "rembourse",
 ]);
 
+const TYPES_REDUCTION = new Set(["%", "MAD"]);
+
 function emptyToNull(value) {
   if (value === undefined || value === null || value === "") {
     return null;
@@ -43,6 +45,20 @@ function toDecimalOrDefault(value, fallback = 0) {
   return Number.isFinite(number) ? Math.round(number * 100) / 100 : fallback;
 }
 
+function computeMontantReduction(subtotal, typeReduction, valeurReduction) {
+  const value = toDecimalOrDefault(valeurReduction, 0);
+
+  if (!typeReduction || value <= 0) {
+    return 0;
+  }
+
+  if (typeReduction === "%") {
+    return Math.round(subtotal * (value / 100) * 100) / 100;
+  }
+
+  return Math.min(subtotal, value);
+}
+
 function calculateNights(dateArrivee, dateDepart) {
   if (!dateArrivee || !dateDepart) {
     return 0;
@@ -59,12 +75,15 @@ function pickReservationFields(body = {}) {
   const prixChambre = toDecimalOrDefault(body.prix_chambre_total, 0);
   const prixBebe = toDecimalOrDefault(body.prix_bebe_total, 0);
   const prixEnfants = toDecimalOrDefault(body.prix_enfants_total, 0);
-  const montantReduction = toDecimalOrDefault(body.montant_reduction, 0);
-  const tauxTva = toDecimalOrDefault(body.taux_tva_applique, 0);
+  const typeReduction = TYPES_REDUCTION.has(body.type_reduction) ? body.type_reduction : null;
+  const valeurReduction = toDecimalOrDefault(body.valeur_reduction, 0);
+  const subtotal = prixChambre + prixBebe + prixEnfants;
+  const montantReduction = computeMontantReduction(subtotal, typeReduction, valeurReduction);
+  const tauxTva = toDecimalOrDefault(body.taux_tva_applique, 20);
   const prixTotalHt =
     body.prix_total_ht != null
       ? toDecimalOrDefault(body.prix_total_ht)
-      : Math.max(0, prixChambre + prixBebe + prixEnfants - montantReduction);
+      : Math.max(0, subtotal - montantReduction);
   const montantTva =
     body.montant_tva != null
       ? toDecimalOrDefault(body.montant_tva)
@@ -87,11 +106,12 @@ function pickReservationFields(body = {}) {
     age_enfant: Math.max(0, toIntOrDefault(body.age_enfant, 0)),
     source: SOURCES.has(body.source) ? body.source : "autre",
     promotion_id: emptyToNull(body.promotion_id) ? toIntOrDefault(body.promotion_id, 0) : null,
+    type_reduction: typeReduction,
+    valeur_reduction: typeReduction ? valeurReduction : 0,
     supplement_id: emptyToNull(body.supplement_id) ? toIntOrDefault(body.supplement_id, 0) : null,
     prix_chambre_total: prixChambre,
     prix_bebe_total: prixBebe,
     prix_enfants_total: prixEnfants,
-    montant_reduction: montantReduction,
     prix_total_ht: prixTotalHt,
     taux_tva_applique: tauxTva,
     montant_tva: montantTva,
@@ -524,11 +544,11 @@ async function createReservation(req, res) {
         INSERT INTO reservations (
           reference, client_id, chambre_id, maison_id,
           date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, age_enfant,
-          source, promotion_id, supplement_id,
-          prix_chambre_total, prix_bebe_total, prix_enfants_total, montant_reduction,
+          source, promotion_id, type_reduction, valeur_reduction, supplement_id,
+          prix_chambre_total, prix_bebe_total, prix_enfants_total,
           prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc,
           statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -544,11 +564,12 @@ async function createReservation(req, res) {
         fields.age_enfant,
         fields.source,
         fields.promotion_id,
+        fields.type_reduction,
+        fields.valeur_reduction,
         fields.supplement_id,
         fields.prix_chambre_total,
         fields.prix_bebe_total,
         fields.prix_enfants_total,
-        fields.montant_reduction,
         fields.prix_total_ht,
         fields.taux_tva_applique,
         fields.montant_tva,
@@ -623,8 +644,8 @@ async function updateReservation(req, res) {
         UPDATE reservations SET
           client_id = ?, chambre_id = ?, maison_id = ?,
           date_arrivee = ?, date_depart = ?, nb_nuits = ?, nb_adultes = ?, nbrs_enfants = ?, nbrs_bebe = ?, age_enfant = ?,
-          source = ?, promotion_id = ?, supplement_id = ?,
-          prix_chambre_total = ?, prix_bebe_total = ?, prix_enfants_total = ?, montant_reduction = ?,
+          source = ?, promotion_id = ?, type_reduction = ?, valeur_reduction = ?, supplement_id = ?,
+          prix_chambre_total = ?, prix_bebe_total = ?, prix_enfants_total = ?,
           prix_total_ht = ?, taux_tva_applique = ?, montant_tva = ?, prix_total_ttc = ?,
           statut_reservation = ?, statut_paiement = ?, montant_paye = ?, notes = ?
         WHERE id = ?
@@ -642,11 +663,12 @@ async function updateReservation(req, res) {
         fields.age_enfant,
         fields.source,
         fields.promotion_id,
+        fields.type_reduction,
+        fields.valeur_reduction,
         fields.supplement_id,
         fields.prix_chambre_total,
         fields.prix_bebe_total,
         fields.prix_enfants_total,
-        fields.montant_reduction,
         fields.prix_total_ht,
         fields.taux_tva_applique,
         fields.montant_tva,

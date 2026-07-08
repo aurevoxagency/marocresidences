@@ -1,7 +1,13 @@
 import { jsPDF } from "jspdf";
 
 import { resolvePhotoUrl, type MaisonDetail, type MaisonListItem } from "@/lib/maisons";
-import type { Reservation, ReservationSource, ReservationStatut, ReservationStatutPaiement } from "@/lib/reservations";
+import {
+  computeMontantReduction,
+  type Reservation,
+  type ReservationSource,
+  type ReservationStatut,
+  type ReservationStatutPaiement,
+} from "@/lib/reservations";
 
 const STATUT_LABELS: Record<ReservationStatut, string> = {
   en_attente: "En attente",
@@ -464,14 +470,35 @@ export async function downloadReservationSheetPdf(
       { label: "Prix bébé", amount: formatMoney(reservation.prix_bebe_total) },
       { label: "Prix enfants", amount: formatMoney(reservation.prix_enfants_total) },
       {
-        label: reservation.promotion_nom ? `Promotion · ${reservation.promotion_nom}` : "Promotion",
+        label: reservation.promotion_nom
+          ? `Promotion · ${reservation.promotion_nom}`
+          : reservation.type_reduction && Number(reservation.valeur_reduction) > 0
+            ? `Réduction · ${
+                reservation.type_reduction === "%"
+                  ? `${reservation.valeur_reduction} %`
+                  : formatMoney(reservation.valeur_reduction)
+              }`
+            : "Réduction",
         amount:
-          Number(reservation.montant_reduction) > 0
-            ? formatMoney(-Math.abs(Number(reservation.montant_reduction)))
+          reservation.type_reduction && Number(reservation.valeur_reduction) > 0
+            ? formatMoney(
+                -Math.abs(
+                  computeMontantReduction(
+                    Number(reservation.prix_chambre_total) +
+                      Number(reservation.prix_bebe_total) +
+                      Number(reservation.prix_enfants_total),
+                    reservation.type_reduction,
+                    Number(reservation.valeur_reduction)
+                  )
+                )
+              )
             : reservation.promotion_nom
               ? "Appliquée"
               : "Aucune",
-        muted: !reservation.promotion_nom,
+        muted: !(
+          reservation.promotion_nom ||
+          (reservation.type_reduction && Number(reservation.valeur_reduction) > 0)
+        ),
       },
       {
         label: reservation.supplement_nom ? `Supplément · ${reservation.supplement_nom}` : "Supplément",

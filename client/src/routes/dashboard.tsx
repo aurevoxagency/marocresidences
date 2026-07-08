@@ -12,6 +12,7 @@ import {
   CircleDollarSign,
   ClipboardList,
   CreditCard,
+  DoorOpen,
   Home,
   LayoutDashboard,
   Layers,
@@ -24,7 +25,6 @@ import {
   PanelLeftOpen,
   BedDouble,
   UtensilsCrossed,
-  Receipt,
   Search,
   UserPlus,
   UserRound,
@@ -86,7 +86,7 @@ type DashboardView =
   | "promotions"
   | "gestion_financiere"
   | "paiements"
-  | "facturation"
+  | "checkin_checkout"
   | "journal_transactions"
   | "chiffre_affaires"
   | "avis_clients"
@@ -97,7 +97,7 @@ const PLACEHOLDER_VIEWS = new Set<DashboardView>([
   "gestion_commerciale",
   "gestion_financiere",
   "paiements",
-  "facturation",
+  "checkin_checkout",
   "journal_transactions",
   "chiffre_affaires",
   "avis_clients",
@@ -367,11 +367,11 @@ function DashboardPage() {
         { id: "prospects", label: "Prospects", icon: UserPlus },
         { id: "clients", label: "Clients", icon: Users },
         { id: "reservations", label: "Réservations", icon: CalendarDays },
+        { id: "checkin_checkout", label: "Check-in / Check-out", icon: DoorOpen },
         { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
         { id: "promotions", label: "Promotions", icon: BadgePercent },
         { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
         { id: "paiements", label: "Paiements", icon: CreditCard },
-        { id: "facturation", label: "Facturation", icon: Receipt },
         { id: "journal_transactions", label: "Journal des transactions", icon: ClipboardList },
         { id: "chiffre_affaires", label: "Chiffre d'affaires", icon: CircleDollarSign },
         { id: "avis_clients", label: "Gestion avis clients", icon: MessageSquareQuote }

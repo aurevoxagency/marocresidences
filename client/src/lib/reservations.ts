@@ -24,6 +24,8 @@ export type ReservationStatutPaiement =
   | "paye_totalement"
   | "rembourse";
 
+export type ReservationTypeReduction = "%" | "MAD";
+
 export type ReservationOccupantType = "adulte" | "enfant" | "bebe";
 
 export type ReservationOccupant = {
@@ -71,11 +73,12 @@ export type Reservation = {
   age_enfant: number;
   source: ReservationSource;
   promotion_id: number | null;
+  type_reduction: ReservationTypeReduction | null;
+  valeur_reduction: number | string;
   supplement_id: number | null;
   prix_chambre_total: number | string;
   prix_bebe_total: number | string;
   prix_enfants_total: number | string;
-  montant_reduction: number | string;
   prix_total_ht: number | string;
   taux_tva_applique: number | string;
   montant_tva: number | string;
@@ -107,11 +110,12 @@ export type ReservationFormData = {
   age_enfant?: number;
   source?: ReservationSource;
   promotion_id?: number | null;
+  type_reduction?: ReservationTypeReduction | null;
+  valeur_reduction?: number;
   supplement_id?: number | null;
   prix_chambre_total: number;
   prix_bebe_total?: number;
   prix_enfants_total?: number;
-  montant_reduction?: number;
   prix_total_ht?: number;
   taux_tva_applique: number;
   montant_tva?: number;
@@ -158,26 +162,49 @@ export function calculateNights(dateArrivee: string, dateDepart: string) {
   return diff > 0 ? diff : 0;
 }
 
+export function computeMontantReduction(
+  subtotal: number,
+  typeReduction?: ReservationTypeReduction | null,
+  valeurReduction?: number
+) {
+  const value = Number(valeurReduction) || 0;
+
+  if (!typeReduction || value <= 0) {
+    return 0;
+  }
+
+  if (typeReduction === "%") {
+    return Math.round(subtotal * (value / 100) * 100) / 100;
+  }
+
+  return Math.min(subtotal, Math.round(value * 100) / 100);
+}
+
 export function calculateReservationTotals(fields: {
   prix_chambre_total: number;
   prix_bebe_total?: number;
   prix_enfants_total?: number;
   supplement_total?: number;
-  montant_reduction?: number;
+  type_reduction?: ReservationTypeReduction | null;
+  valeur_reduction?: number;
   taux_tva_applique: number;
 }) {
-  const prixTotalHt = Math.max(
-    0,
+  const subtotal =
     fields.prix_chambre_total +
-      (fields.prix_bebe_total ?? 0) +
-      (fields.prix_enfants_total ?? 0) +
-      (fields.supplement_total ?? 0) -
-      (fields.montant_reduction ?? 0)
+    (fields.prix_bebe_total ?? 0) +
+    (fields.prix_enfants_total ?? 0) +
+    (fields.supplement_total ?? 0);
+  const montantReduction = computeMontantReduction(
+    subtotal,
+    fields.type_reduction,
+    fields.valeur_reduction
   );
+  const prixTotalHt = Math.max(0, subtotal - montantReduction);
   const montantTva = Math.round(prixTotalHt * (fields.taux_tva_applique / 100) * 100) / 100;
   const prixTotalTtc = Math.round((prixTotalHt + montantTva) * 100) / 100;
 
   return {
+    montant_reduction: montantReduction,
     prix_total_ht: prixTotalHt,
     montant_tva: montantTva,
     prix_total_ttc: prixTotalTtc,

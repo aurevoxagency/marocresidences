@@ -79,6 +79,7 @@ import {
   getEnfantAgeOptions,
   calculateNights,
   calculateReservationTotals,
+  computeMontantReduction,
   createReservation,
   deleteReservation,
   fetchReservation,
@@ -92,6 +93,7 @@ import {
   type ReservationSource,
   type ReservationStatut,
   type ReservationStatutPaiement,
+  type ReservationTypeReduction,
 } from "@/lib/reservations";
 
 function findSaisonForDate(saisons: Saison[], date?: string) {
@@ -353,7 +355,8 @@ type FormState = {
   prix_chambre_total: string;
   prix_bebe_total: string;
   prix_enfants_total: string;
-  montant_reduction: string;
+  type_reduction: "" | ReservationTypeReduction;
+  valeur_reduction: string;
   taux_tva_applique: string;
   statut_reservation: ReservationStatut;
   statut_paiement: ReservationStatutPaiement;
@@ -377,8 +380,9 @@ function emptyForm(maisonId = ""): FormState {
     prix_chambre_total: "0",
     prix_bebe_total: "0",
     prix_enfants_total: "0",
-    montant_reduction: "0",
-    taux_tva_applique: "10",
+    type_reduction: "",
+    valeur_reduction: "0",
+    taux_tva_applique: "20",
     statut_reservation: "en_attente",
     statut_paiement: "non_paye",
     montant_paye: "0",
@@ -415,7 +419,8 @@ function toFormState(reservation: Reservation): FormState {
     prix_chambre_total: String(reservation.prix_chambre_total ?? 0),
     prix_bebe_total: String(reservation.prix_bebe_total ?? 0),
     prix_enfants_total: String(reservation.prix_enfants_total),
-    montant_reduction: String(reservation.montant_reduction),
+    type_reduction: reservation.type_reduction || "",
+    valeur_reduction: String(reservation.valeur_reduction ?? 0),
     taux_tva_applique: String(reservation.taux_tva_applique),
     statut_reservation: reservation.statut_reservation,
     statut_paiement: reservation.statut_paiement,
@@ -753,7 +758,8 @@ export function ReservationsManagement() {
       prix_bebe_total: Number(form.prix_bebe_total) || 0,
       prix_enfants_total: Number(form.prix_enfants_total) || 0,
       supplement_total: supplementTotal,
-      montant_reduction: Number(form.montant_reduction) || 0,
+      type_reduction: form.type_reduction || null,
+      valeur_reduction: Number(form.valeur_reduction) || 0,
       taux_tva_applique: Number(form.taux_tva_applique) || 0,
     });
   }, [form, supplementTotal]);
@@ -913,11 +919,12 @@ export function ReservationsManagement() {
         age_enfant: detailed.age_enfant,
         source: detailed.source,
         promotion_id: detailed.promotion_id,
+        type_reduction: detailed.type_reduction,
+        valeur_reduction: Number(detailed.valeur_reduction) || 0,
         supplement_id: detailed.supplement_id,
         prix_chambre_total: Number(detailed.prix_chambre_total) || 0,
         prix_bebe_total: Number(detailed.prix_bebe_total) || 0,
         prix_enfants_total: Number(detailed.prix_enfants_total) || 0,
-        montant_reduction: Number(detailed.montant_reduction) || 0,
         taux_tva_applique: Number(detailed.taux_tva_applique) || 0,
         prix_total_ht: Number(detailed.prix_total_ht) || 0,
         montant_tva: Number(detailed.montant_tva) || 0,
@@ -1163,13 +1170,16 @@ export function ReservationsManagement() {
       age_enfant: firstChildAge || 0,
       source: form.source,
       promotion_id: form.promotion_id ? Number(form.promotion_id) : null,
+      type_reduction: form.type_reduction || null,
+      valeur_reduction: Number(form.valeur_reduction) || 0,
       supplement_id: form.supplement_id ? Number(form.supplement_id) : null,
       prix_chambre_total: Number(form.prix_chambre_total) || 0,
       prix_bebe_total: Number(form.prix_bebe_total) || 0,
       prix_enfants_total: Number(form.prix_enfants_total) || 0,
-      montant_reduction: Number(form.montant_reduction) || 0,
       taux_tva_applique: Number(form.taux_tva_applique) || 0,
-      ...computedTotals,
+      prix_total_ht: computedTotals.prix_total_ht,
+      montant_tva: computedTotals.montant_tva,
+      prix_total_ttc: computedTotals.prix_total_ttc,
       statut_reservation: form.statut_reservation,
       statut_paiement: form.statut_paiement,
       montant_paye: Number(form.montant_paye) || 0,
@@ -1755,16 +1765,51 @@ export function ReservationsManagement() {
                   ) : null}
                 </div>
                 <div className="space-y-2">
-                  <Label>Réduction</Label>
+                  <Label>Type de réduction</Label>
+                  <Select
+                    value={form.type_reduction || "none"}
+                    onValueChange={(value) =>
+                      setForm((c) => ({
+                        ...c,
+                        type_reduction: value === "none" ? "" : (value as ReservationTypeReduction),
+                        valeur_reduction: value === "none" ? "0" : c.valeur_reduction,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Aucune" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucune</SelectItem>
+                      <SelectItem value="%">Pourcentage (%)</SelectItem>
+                      <SelectItem value="MAD">Montant (MAD)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Valeur réduction
+                    {form.type_reduction === "%"
+                      ? " (%)"
+                      : form.type_reduction === "MAD"
+                        ? " (MAD)"
+                        : ""}
+                  </Label>
                   <Input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={form.montant_reduction}
+                    disabled={!form.type_reduction}
+                    value={form.valeur_reduction}
                     onChange={(e) =>
-                      setForm((c) => ({ ...c, montant_reduction: e.target.value }))
+                      setForm((c) => ({ ...c, valeur_reduction: e.target.value }))
                     }
                   />
+                  {form.type_reduction && Number(form.valeur_reduction) > 0 ? (
+                    <p className="text-[11px] text-slate-500">
+                      Réduction calculée : {formatMoney(computedTotals.montant_reduction)}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label>TVA (%)</Label>
@@ -2083,10 +2128,17 @@ export function ReservationsManagement() {
                     <span>{formatMoney(supplementTotal)}</span>
                   </div>
                 ) : null}
-                {Number(form.montant_reduction) > 0 ? (
+                {computedTotals.montant_reduction > 0 ? (
                   <div className="flex items-center justify-between gap-3 text-emerald-700">
-                    <span>Réduction</span>
-                    <span>- {formatMoney(form.montant_reduction)}</span>
+                    <span>
+                      Réduction
+                      {form.type_reduction === "%"
+                        ? ` (${form.valeur_reduction}%)`
+                        : form.type_reduction === "MAD"
+                          ? ` (${form.valeur_reduction} MAD)`
+                          : ""}
+                    </span>
+                    <span>- {formatMoney(computedTotals.montant_reduction)}</span>
                   </div>
                 ) : null}
                 <div className="mt-2 border-t border-slate-200 pt-2">
@@ -2288,7 +2340,24 @@ export function ReservationsManagement() {
                     />
                     <FicheInfoItem
                       label="Réduction"
-                      value={formatMoney(viewReservation.montant_reduction)}
+                      value={
+                        viewReservation.type_reduction &&
+                        Number(viewReservation.valeur_reduction) > 0
+                          ? `${
+                              viewReservation.type_reduction === "%"
+                                ? `${viewReservation.valeur_reduction} %`
+                                : formatMoney(viewReservation.valeur_reduction)
+                            } (−${formatMoney(
+                              computeMontantReduction(
+                                Number(viewReservation.prix_chambre_total) +
+                                  Number(viewReservation.prix_bebe_total) +
+                                  Number(viewReservation.prix_enfants_total),
+                                viewReservation.type_reduction,
+                                Number(viewReservation.valeur_reduction)
+                              )
+                            )})`
+                          : "Aucune"
+                      }
                     />
                     <FicheInfoItem
                       label="Promotion"
