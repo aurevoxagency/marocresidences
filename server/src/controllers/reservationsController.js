@@ -79,7 +79,7 @@ function pickReservationFields(body = {}) {
   const valeurReduction = toDecimalOrDefault(body.valeur_reduction, 0);
   const subtotal = prixChambre + prixBebe + prixEnfants;
   const montantReduction = computeMontantReduction(subtotal, typeReduction, valeurReduction);
-  const tauxTva = toDecimalOrDefault(body.taux_tva_applique, 20);
+  const tauxTva = toDecimalOrDefault(body.taux_tva_applique, 0);
   const prixTotalHt =
     body.prix_total_ht != null
       ? toDecimalOrDefault(body.prix_total_ht)

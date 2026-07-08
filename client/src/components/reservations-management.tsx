@@ -382,7 +382,7 @@ function emptyForm(maisonId = ""): FormState {
     prix_enfants_total: "0",
     type_reduction: "",
     valeur_reduction: "0",
-    taux_tva_applique: "20",
+    taux_tva_applique: "10",
     statut_reservation: "en_attente",
     statut_paiement: "non_paye",
     montant_paye: "0",
