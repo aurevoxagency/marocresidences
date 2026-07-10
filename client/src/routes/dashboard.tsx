@@ -14,6 +14,7 @@ import {
   CreditCard,
   DoorOpen,
   FileText,
+  FileSpreadsheet,
   Home,
   LayoutDashboard,
   Layers,
@@ -27,6 +28,7 @@ import {
   BedDouble,
   UtensilsCrossed,
   Search,
+  ShoppingBag,
   UserPlus,
   UserRound,
   Users,
@@ -36,9 +38,11 @@ import {
 
 import { AccountSettings } from "@/components/account-settings";
 import { CategoriesChambreManagement } from "@/components/categories-chambre-management";
+import { CommandesManagement } from "@/components/commandes-management";
 import { ClientsManagement } from "@/components/clients-management";
 import { DevisManagement } from "@/components/devis-management";
 import { DashboardOverview } from "@/components/dashboard-overview";
+import { FacturesManagement } from "@/components/factures-management";
 import { HebergementManagement } from "@/components/hebergement-management";
 import { MaisonsManagement } from "@/components/maisons-management";
 import { PromotionsManagement } from "@/components/promotions-management";
@@ -81,6 +85,7 @@ type DashboardView =
   | "reservations"
   | "gestion_commerciale"
   | "gestion_devis"
+  | "gestion_commandes"
   | "gestion_saisons"
   | "gestion_chambres"
   | "gestion_categories"
@@ -88,6 +93,7 @@ type DashboardView =
   | "gestion_tranches_age"
   | "promotions"
   | "gestion_financiere"
+  | "gestion_factures"
   | "paiements"
   | "checkin_checkout"
   | "journal_transactions"
@@ -373,6 +379,8 @@ function DashboardPage() {
         { id: "checkin_checkout", label: "Check-in / Check-out", icon: DoorOpen },
         { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
         { id: "gestion_devis", label: "Devis", icon: FileText, indent: true },
+        { id: "gestion_commandes", label: "Commandes", icon: ShoppingBag, indent: true },
+        { id: "gestion_factures", label: "Factures", icon: FileSpreadsheet, indent: true },
         { id: "promotions", label: "Promotions", icon: BadgePercent },
         { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
         { id: "paiements", label: "Paiements", icon: CreditCard },
@@ -629,6 +637,14 @@ function DashboardPage() {
 
         {activeView === "gestion_devis" && canManageGuestHouses ? (
           <DevisManagement />
+        ) : null}
+
+        {activeView === "gestion_commandes" && canManageGuestHouses ? (
+          <CommandesManagement />
+        ) : null}
+
+        {activeView === "gestion_factures" && canManageGuestHouses ? (
+          <FacturesManagement />
         ) : null}
 
         {activeView === "gestion_saisons" && canManageGuestHouses ? (

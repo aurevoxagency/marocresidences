@@ -66,6 +66,7 @@ export type Devis = {
   maison_nom?: string | null;
   chambre_nom?: string | null;
   promotion_nom?: string | null;
+  reservation_reference?: string | null;
   items?: DevisItem[];
 };
 
@@ -200,4 +201,64 @@ export async function deleteDevis(id: number) {
   });
 
   return parseResponse<{ message: string }>(response);
+}
+
+function dateOnly(value?: string | null) {
+  return value ? String(value).slice(0, 10) : undefined;
+}
+
+export function buildDevisFormDataFromDevis(
+  devis: Devis,
+  patch?: Partial<DevisFormData>
+): DevisFormData {
+  const items = (devis.items ?? []).map((item, index) => ({
+    type_item: item.type_item,
+    chambre_id: item.chambre_id ?? null,
+    tranche_age_id: item.tranche_age_id ?? null,
+    supplement_id: item.supplement_id ?? null,
+    description: item.description,
+    quantite: Number(item.quantite) || 1,
+    prix_unitaire: Number(item.prix_unitaire) || 0,
+    prix_total: Number(item.prix_total) || 0,
+    ordre: item.ordre ?? index,
+  }));
+
+  return {
+    client_id: devis.client_id,
+    prospect_id: devis.prospect_id,
+    maison_id: devis.maison_id,
+    chambre_id: devis.chambre_id,
+    date_arrivee: dateOnly(devis.date_arrivee),
+    date_depart: dateOnly(devis.date_depart),
+    nb_nuits: devis.nb_nuits ?? undefined,
+    nb_adultes: devis.nb_adultes,
+    nbrs_enfants: devis.nbrs_enfants,
+    nbrs_bebe: devis.nbrs_bebe,
+    promotion_id: devis.promotion_id,
+    type_reduction: devis.type_reduction,
+    valeur_reduction: Number(devis.valeur_reduction) || 0,
+    montant_ht: Number(devis.montant_ht),
+    taux_tva: Number(devis.taux_tva),
+    montant_tva: Number(devis.montant_tva),
+    montant_ttc: Number(devis.montant_ttc),
+    statut: devis.statut,
+    date_emission: dateOnly(devis.date_emission),
+    date_validite: dateOnly(devis.date_validite),
+    date_reponse: dateOnly(devis.date_reponse) ?? null,
+    reservation_id: devis.reservation_id,
+    notes: devis.notes,
+    items,
+    ...patch,
+  };
+}
+
+export function isDevisConverted(
+  devis: Devis,
+  commandesWithDevis: Array<{ devis_id: number | null }>
+) {
+  if (devis.statut === "converti") {
+    return true;
+  }
+
+  return commandesWithDevis.some((commande) => commande.devis_id === devis.id);
 }

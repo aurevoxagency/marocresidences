@@ -11,6 +11,8 @@ const hebergementRoutes = require("./routes/hebergementRoutes");
 const promotionsRoutes = require("./routes/promotionsRoutes");
 const reservationsRoutes = require("./routes/reservationsRoutes");
 const devisRoutes = require("./routes/devisRoutes");
+const commandesRoutes = require("./routes/commandesRoutes");
+const facturesRoutes = require("./routes/facturesRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const { uploadsDir } = require("./middleware/uploadMiddleware");
 const { testConnection } = require("../database/db");
@@ -49,6 +51,8 @@ app.use("/api/clients", clientsRoutes);
 app.use("/api/promotions", promotionsRoutes);
 app.use("/api/reservations", reservationsRoutes);
 app.use("/api/devis", devisRoutes);
+app.use("/api/commandes", commandesRoutes);
+app.use("/api/factures", facturesRoutes);
 app.use("/api/hebergement", hebergementRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
@@ -74,6 +78,8 @@ async function startServer() {
     console.log("  - /api/promotions");
     console.log("  - /api/reservations");
     console.log("  - /api/devis");
+    console.log("  - /api/commandes");
+    console.log("  - /api/factures");
     console.log("  - /api/hebergement");
     console.log("  - /api/dashboard");
   });

@@ -5,6 +5,7 @@ import {
   Pencil,
   Plus,
   Search,
+  ShoppingBag,
   Trash2,
   Wand2,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { AssociatedDocumentHint } from "@/components/associated-document-hint";
 import { fetchClients, type Client } from "@/lib/clients";
 import {
   calculateDevisTotals,
@@ -62,6 +64,8 @@ import {
   deleteDevis,
   fetchDevis,
   fetchDevisById,
+  buildDevisFormDataFromDevis,
+  isDevisConverted,
   todayIsoDate,
   updateDevis,
   type Devis,
@@ -70,10 +74,17 @@ import {
   type DevisItemType,
   type DevisStatut,
 } from "@/lib/devis";
+import {
+  buildCommandePayloadFromDevis,
+  createCommande,
+  fetchCommandes,
+  type Commande,
+} from "@/lib/commandes";
 import { fetchChambres, fetchSaisons, fetchSupplementTarifs, type ChambreListItem, type Saison } from "@/lib/hebergement";
 import { fetchMaisons, type MaisonListItem } from "@/lib/maisons";
 import { fetchPromotions, type Promotion } from "@/lib/promotions";
 import { fetchProspects, type Prospect } from "@/lib/prospects";
+import { fetchReservations, type Reservation } from "@/lib/reservations";
 import type { ReservationTypeReduction } from "@/lib/reservations";
 
 const STATUT_LABELS: Record<DevisStatut, string> = {
@@ -118,6 +129,7 @@ type ItemDraft = {
 };
 
 type FormState = {
+  reservation_id: string;
   destinataire_type: DestinataireType;
   client_id: string;
   prospect_id: string;
@@ -187,6 +199,7 @@ function emptyItem(): ItemDraft {
 
 function buildDefaultForm(): FormState {
   return {
+    reservation_id: "",
     destinataire_type: "client",
     client_id: "",
     prospect_id: "",
@@ -211,6 +224,7 @@ function buildDefaultForm(): FormState {
 
 function devisToForm(devis: Devis): FormState {
   return {
+    reservation_id: devis.reservation_id ? String(devis.reservation_id) : "",
     destinataire_type: devis.client_id ? "client" : "prospect",
     client_id: devis.client_id ? String(devis.client_id) : "",
     prospect_id: devis.prospect_id ? String(devis.prospect_id) : "",
@@ -302,6 +316,7 @@ function formToPayload(form: FormState): DevisFormData {
     statut: form.statut,
     date_emission: form.date_emission,
     date_validite: form.date_validite,
+    reservation_id: form.reservation_id ? Number(form.reservation_id) : null,
     notes: form.notes.trim() || null,
     items,
   };
@@ -309,9 +324,11 @@ function formToPayload(form: FormState): DevisFormData {
 
 export function DevisManagement() {
   const [devisList, setDevisList] = useState<Devis[]>([]);
+  const [commandes, setCommandes] = useState<Commande[]>([]);
   const [maisons, setMaisons] = useState<MaisonListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
   const [chambres, setChambres] = useState<ChambreListItem[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [supplements, setSupplements] = useState<
@@ -327,23 +344,32 @@ export function DevisManagement() {
   const [loadingEditForm, setLoadingEditForm] = useState(false);
   const [form, setForm] = useState<FormState>(buildDefaultForm);
   const [deleteTarget, setDeleteTarget] = useState<Devis | null>(null);
+  const [convertTarget, setConvertTarget] = useState<Devis | null>(null);
+  const [converting, setConverting] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const [devisData, maisonsData, clientsData, prospectsData] = await Promise.all([
-        fetchDevis(),
-        fetchMaisons(),
-        fetchClients(),
-        fetchProspects(),
-      ]);
+      const [devisData, commandesData, maisonsData, clientsData, prospectsData, reservationsData] =
+        await Promise.all([
+          fetchDevis(),
+          fetchCommandes(),
+          fetchMaisons(),
+          fetchClients(),
+          fetchProspects(),
+          fetchReservations(),
+        ]);
 
       setDevisList(devisData);
+      setCommandes(commandesData);
       setMaisons(maisonsData);
       setClients(clientsData);
       setProspects(prospectsData.filter((p) => p.statut !== "converti"));
+      setReservations(
+        reservationsData.filter((reservation) => reservation.statut_reservation !== "annulee")
+      );
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
     } finally {
@@ -433,6 +459,7 @@ export function DevisManagement() {
         devis.prospect_nom,
         devis.maison_nom,
         devis.chambre_nom,
+        devis.reservation_reference,
       ]
         .filter(Boolean)
         .join(" ")
@@ -442,9 +469,50 @@ export function DevisManagement() {
     });
   }, [devisList, search, statutFilter]);
 
+  const commandeByDevisId = useMemo(() => {
+    const map = new Map<number, Commande>();
+
+    for (const commande of commandes) {
+      if (commande.devis_id != null) {
+        map.set(commande.devis_id, commande);
+      }
+    }
+
+    return map;
+  }, [commandes]);
+
   const selectedChambre = useMemo(
     () => chambres.find((chambre) => String(chambre.id) === form.chambre_id),
     [chambres, form.chambre_id]
+  );
+
+  const reservationOptions = useMemo(() => {
+    let options = reservations;
+
+    if (form.client_id) {
+      const byClient = options.filter(
+        (reservation) => String(reservation.client_id) === form.client_id
+      );
+      if (byClient.length > 0) {
+        options = byClient;
+      }
+    }
+
+    if (form.maison_id) {
+      const byMaison = options.filter(
+        (reservation) => String(reservation.maison_id) === form.maison_id
+      );
+      if (byMaison.length > 0) {
+        options = byMaison;
+      }
+    }
+
+    return options;
+  }, [reservations, form.client_id, form.maison_id]);
+
+  const selectedReservation = useMemo(
+    () => reservations.find((reservation) => String(reservation.id) === form.reservation_id),
+    [reservations, form.reservation_id]
   );
 
   const openCreateDialog = () => {
@@ -468,6 +536,38 @@ export function DevisManagement() {
     } finally {
       setLoadingEditForm(false);
     }
+  };
+
+  const handleReservationChange = (reservationId: string) => {
+    if (!reservationId || reservationId === "none") {
+      setForm((current) => ({ ...current, reservation_id: "" }));
+      return;
+    }
+
+    const reservation = reservations.find((item) => String(item.id) === reservationId);
+
+    if (!reservation) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      reservation_id: reservationId,
+      destinataire_type: "client",
+      client_id: String(reservation.client_id),
+      prospect_id: "",
+      maison_id: String(reservation.maison_id),
+      chambre_id: String(reservation.chambre_id),
+      date_arrivee: dateInput(reservation.date_arrivee),
+      date_depart: dateInput(reservation.date_depart),
+      nb_adultes: String(reservation.nb_adultes ?? 1),
+      nbrs_enfants: String(reservation.nbrs_enfants ?? 0),
+      nbrs_bebe: String(reservation.nbrs_bebe ?? 0),
+      promotion_id: reservation.promotion_id ? String(reservation.promotion_id) : "",
+      type_reduction: reservation.type_reduction || "",
+      valeur_reduction: String(reservation.valeur_reduction ?? 0),
+      taux_tva: String(reservation.taux_tva_applique ?? 10),
+    }));
   };
 
   const updateItem = (key: string, patch: Partial<ItemDraft>) => {
@@ -536,6 +636,33 @@ export function DevisManagement() {
       setError(saveError instanceof Error ? saveError.message : "Enregistrement impossible.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleConvertToCommande = async () => {
+    if (!convertTarget) {
+      return;
+    }
+
+    setConverting(true);
+    setError(null);
+
+    try {
+      const detailed = await fetchDevisById(convertTarget.id);
+      const commandePayload = buildCommandePayloadFromDevis(detailed);
+      await createCommande(commandePayload);
+      await updateDevis(
+        detailed.id,
+        buildDevisFormDataFromDevis(detailed, { statut: "converti" })
+      );
+      setConvertTarget(null);
+      await loadData();
+    } catch (convertError) {
+      setError(
+        convertError instanceof Error ? convertError.message : "Conversion en commande impossible."
+      );
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -636,7 +763,15 @@ export function DevisManagement() {
             ) : (
               filteredDevis.map((devis) => (
                 <TableRow key={devis.id}>
-                  <TableCell className="font-medium">{devis.reference}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{devis.reference}</div>
+                    {commandeByDevisId.get(devis.id) ? (
+                      <AssociatedDocumentHint
+                        label="Commande associée"
+                        reference={commandeByDevisId.get(devis.id)!.reference}
+                      />
+                    ) : null}
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">
                       {devis.client_nom?.trim() || devis.prospect_nom?.trim() || "—"}
@@ -648,6 +783,9 @@ export function DevisManagement() {
                   <TableCell>
                     <div>{devis.maison_nom}</div>
                     <div className="text-xs text-slate-500">
+                      {devis.reservation_reference
+                        ? `${devis.reservation_reference} · `
+                        : ""}
                       {devis.date_arrivee && devis.date_depart
                         ? `${formatDate(devis.date_arrivee)} → ${formatDate(devis.date_depart)}`
                         : "Dates non définies"}
@@ -671,6 +809,15 @@ export function DevisManagement() {
                         <DropdownMenuItem onClick={() => void openEditDialog(devis)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Modifier
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={isDevisConverted(devis, commandes) || converting}
+                          onClick={() => setConvertTarget(devis)}
+                        >
+                          <ShoppingBag className="mr-2 h-4 w-4" />
+                          {isDevisConverted(devis, commandes)
+                            ? "Déjà converti en commande"
+                            : "Convertir en commande"}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -750,6 +897,38 @@ export function DevisManagement() {
             </section>
 
             <section className="grid gap-4 rounded-xl border border-slate-200 p-4 md:grid-cols-2">
+              <div className="space-y-2 md:col-span-2">
+                <Label>Réservation liée (optionnelle)</Label>
+                <Select
+                  value={form.reservation_id || "none"}
+                  onValueChange={handleReservationChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucune réservation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucune</SelectItem>
+                    {form.reservation_id &&
+                    !reservationOptions.some((r) => String(r.id) === form.reservation_id) ? (
+                      <SelectItem value={form.reservation_id}>
+                        {editingDevis?.reservation_reference || `Réservation #${form.reservation_id}`}
+                      </SelectItem>
+                    ) : null}
+                    {reservationOptions.map((reservation) => (
+                      <SelectItem key={reservation.id} value={String(reservation.id)}>
+                        {reservation.reference} · {reservation.client_nom} · {reservation.maison_nom}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {form.reservation_id ? (
+                  <p className="text-xs text-slate-500">
+                    Les informations client, maison, chambre et dates sont préremplies depuis la
+                    réservation{selectedReservation ? ` ${selectedReservation.reference}` : ""}.
+                  </p>
+                ) : null}
+              </div>
+
               <div className="space-y-3">
                 <Label>Destinataire</Label>
                 <div className="flex gap-2">
@@ -776,6 +955,7 @@ export function DevisManagement() {
                         ...current,
                         destinataire_type: "prospect",
                         client_id: "",
+                        reservation_id: "",
                       }))
                     }
                   >
@@ -1221,6 +1401,27 @@ export function DevisManagement() {
               onClick={() => void handleDelete()}
             >
               Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(convertTarget)} onOpenChange={() => setConvertTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Convertir en commande ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Une commande sera créée à partir du devis {convertTarget?.reference}. Le devis sera
+              marqué comme converti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={converting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={converting}
+              onClick={() => void handleConvertToCommande()}
+            >
+              {converting ? "Conversion..." : "Convertir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -195,13 +195,15 @@ const DEVIS_SELECT = `
     pr.email AS prospect_email,
     m.nom AS maison_nom,
     ch.nom AS chambre_nom,
-    p.nom AS promotion_nom
+    p.nom AS promotion_nom,
+    r.reference AS reservation_reference
   FROM devis d
   LEFT JOIN clients c ON c.id = d.client_id
   LEFT JOIN prospects pr ON pr.id = d.prospect_id
   INNER JOIN maisons_hotes m ON m.id = d.maison_id
   LEFT JOIN chambres ch ON ch.id = d.chambre_id
   LEFT JOIN promotions p ON p.id = d.promotion_id
+  LEFT JOIN reservations r ON r.id = d.reservation_id
 `;
 
 async function generateReference(connection) {
