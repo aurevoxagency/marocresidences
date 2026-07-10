@@ -13,6 +13,7 @@ import {
   ClipboardList,
   CreditCard,
   DoorOpen,
+  FileText,
   Home,
   LayoutDashboard,
   Layers,
@@ -36,6 +37,7 @@ import {
 import { AccountSettings } from "@/components/account-settings";
 import { CategoriesChambreManagement } from "@/components/categories-chambre-management";
 import { ClientsManagement } from "@/components/clients-management";
+import { DevisManagement } from "@/components/devis-management";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { HebergementManagement } from "@/components/hebergement-management";
 import { MaisonsManagement } from "@/components/maisons-management";
@@ -78,6 +80,7 @@ type DashboardView =
   | "clients"
   | "reservations"
   | "gestion_commerciale"
+  | "gestion_devis"
   | "gestion_saisons"
   | "gestion_chambres"
   | "gestion_categories"
@@ -369,6 +372,7 @@ function DashboardPage() {
         { id: "reservations", label: "Réservations", icon: CalendarDays },
         { id: "checkin_checkout", label: "Check-in / Check-out", icon: DoorOpen },
         { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
+        { id: "gestion_devis", label: "Devis", icon: FileText, indent: true },
         { id: "promotions", label: "Promotions", icon: BadgePercent },
         { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
         { id: "paiements", label: "Paiements", icon: CreditCard },
@@ -621,6 +625,10 @@ function DashboardPage() {
 
         {activeView === "promotions" && canManageGuestHouses ? (
           <PromotionsManagement />
+        ) : null}
+
+        {activeView === "gestion_devis" && canManageGuestHouses ? (
+          <DevisManagement />
         ) : null}
 
         {activeView === "gestion_saisons" && canManageGuestHouses ? (
