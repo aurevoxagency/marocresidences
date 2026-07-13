@@ -13,11 +13,16 @@ const reservationsRoutes = require("./routes/reservationsRoutes");
 const devisRoutes = require("./routes/devisRoutes");
 const commandesRoutes = require("./routes/commandesRoutes");
 const facturesRoutes = require("./routes/facturesRoutes");
+const checkinsRoutes = require("./routes/checkinsRoutes");
+const journalTransactionsRoutes = require("./routes/journalTransactionsRoutes");
+const avisClientsRoutes = require("./routes/avisClientsRoutes");
+const publicBookingRoutes = require("./routes/publicBookingRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const { uploadsDir } = require("./middleware/uploadMiddleware");
 const { testConnection } = require("../database/db");
 const { ensurePasswordResetSchema } = require("../database/passwordResetSchema");
 const { ensureHebergementCatalogues } = require("../database/hebergementCatalogSchema");
+const { ensureJournalTransactionsSchema } = require("../database/journalTransactionsSchema");
 
 dotenv.config();
 
@@ -53,7 +58,11 @@ app.use("/api/reservations", reservationsRoutes);
 app.use("/api/devis", devisRoutes);
 app.use("/api/commandes", commandesRoutes);
 app.use("/api/factures", facturesRoutes);
+app.use("/api/checkins", checkinsRoutes);
+app.use("/api/journal-transactions", journalTransactionsRoutes);
+app.use("/api/avis-clients", avisClientsRoutes);
 app.use("/api/hebergement", hebergementRoutes);
+app.use("/api/public", publicBookingRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 async function startServer() {
@@ -67,6 +76,7 @@ async function startServer() {
 
   await ensurePasswordResetSchema();
   await ensureHebergementCatalogues();
+  await ensureJournalTransactionsSchema();
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
@@ -80,7 +90,11 @@ async function startServer() {
     console.log("  - /api/devis");
     console.log("  - /api/commandes");
     console.log("  - /api/factures");
+    console.log("  - /api/checkins");
+    console.log("  - /api/journal-transactions");
+    console.log("  - /api/avis-clients");
     console.log("  - /api/hebergement");
+    console.log("  - /api/public");
     console.log("  - /api/dashboard");
   });
 }

@@ -261,6 +261,138 @@ async function getMaisons(req, res) {
   }
 }
 
+async function getMaisonsCatalog(req, res) {
+  try {
+    const q = String(req.query.q || "").trim();
+    const params = [];
+    let where = "WHERE m.statut = 'actif'";
+
+    if (q) {
+      where += ` AND (
+        m.nom LIKE ? OR m.ville LIKE ? OR m.quartier LIKE ?
+        OR m.adresse LIKE ? OR m.categorie LIKE ?
+      )`;
+      const like = `%${q}%`;
+      params.push(like, like, like, like, like);
+    }
+
+    const [rows] = await pool.query(
+      `
+        SELECT
+          m.id,
+          m.nom,
+          m.description,
+          m.categorie,
+          m.nb_chambres,
+          m.capacite_max,
+          m.adresse,
+          m.quartier,
+          m.ville,
+          m.pays,
+          m.telephone,
+          m.whatsapp,
+          m.note_moyenne,
+          m.heure_checkin,
+          m.heure_checkout,
+          m.devise,
+          (
+            SELECT p.url
+            FROM photos p
+            WHERE p.maison_id = m.id
+            ORDER BY p.est_principale DESC, p.ordre ASC, p.id ASC
+            LIMIT 1
+          ) AS photo_principale
+        FROM maisons_hotes m
+        ${where}
+        ORDER BY m.note_moyenne DESC, m.nom ASC
+      `,
+      params
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    const ids = rows.map((row) => row.id);
+
+    const [priceRows] = await pool.query(
+      `
+        SELECT
+          c.maison_id,
+          MIN(tc.prix_adulte) AS prix_adulte_min
+        FROM chambres c
+        INNER JOIN tarifs_chambre tc ON tc.chambre_id = c.id
+        INNER JOIN saisons s ON s.id = tc.saison_id AND s.maison_id = c.maison_id
+        WHERE c.maison_id IN (?)
+          AND c.statut = 'actif'
+          AND tc.prix_adulte > 0
+          AND (
+            CURDATE() BETWEEN s.date_debut AND s.date_fin
+            OR NOT EXISTS (
+              SELECT 1
+              FROM saisons sx
+              WHERE sx.maison_id = c.maison_id
+                AND CURDATE() BETWEEN sx.date_debut AND sx.date_fin
+            )
+          )
+        GROUP BY c.maison_id
+      `,
+      [ids]
+    );
+
+    const prixByMaison = new Map(
+      priceRows.map((row) => [row.maison_id, Number(row.prix_adulte_min)])
+    );
+
+    const [services] = await pool.query(
+      `
+        SELECT ms.maison_id, s.nom
+        FROM maison_services ms
+        INNER JOIN services s ON s.id = ms.service_id
+        WHERE ms.maison_id IN (?)
+        ORDER BY s.nom ASC
+      `,
+      [ids]
+    );
+    const [equipements] = await pool.query(
+      `
+        SELECT me.maison_id, e.nom
+        FROM maison_equipements me
+        INNER JOIN equipements e ON e.id = me.equipement_id
+        WHERE me.maison_id IN (?)
+        ORDER BY e.nom ASC
+      `,
+      [ids]
+    );
+
+    const servicesByMaison = new Map();
+    for (const item of services) {
+      const list = servicesByMaison.get(item.maison_id) || [];
+      list.push(item.nom);
+      servicesByMaison.set(item.maison_id, list);
+    }
+
+    const equipementsByMaison = new Map();
+    for (const item of equipements) {
+      const list = equipementsByMaison.get(item.maison_id) || [];
+      list.push(item.nom);
+      equipementsByMaison.set(item.maison_id, list);
+    }
+
+    return res.status(200).json(
+      rows.map((row) => ({
+        ...row,
+        prix_adulte_min: prixByMaison.get(row.id) ?? null,
+        services: (servicesByMaison.get(row.id) || []).slice(0, 6),
+        equipements: (equipementsByMaison.get(row.id) || []).slice(0, 6),
+      }))
+    );
+  } catch (error) {
+    console.error("Error fetching maisons catalog:", error);
+    return res.status(500).json({ message: "Impossible de charger le catalogue." });
+  }
+}
+
 async function getMaisonById(req, res) {
   try {
     const maison = await fetchMaisonById(pool, req.params.id);
@@ -457,6 +589,7 @@ async function getReferenceData(req, res) {
 
 module.exports = {
   getMaisons,
+  getMaisonsCatalog,
   getMaisonById,
   createMaison,
   updateMaison,

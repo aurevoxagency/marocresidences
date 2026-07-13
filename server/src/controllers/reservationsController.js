@@ -148,6 +148,9 @@ function pickOccupants(body = {}) {
         type === "enfant" && emptyToNull(item.tranche_age_id) != null
           ? toIntOrDefault(item.tranche_age_id, 0)
           : null;
+      const supplementId = emptyToNull(item.supplement_id)
+        ? toIntOrDefault(item.supplement_id, 0)
+        : null;
 
       return {
         type_occupant: type,
@@ -155,6 +158,7 @@ function pickOccupants(body = {}) {
         prenom: emptyToNull(item.prenom?.trim()),
         age_enfant: ageEnfant != null && ageEnfant >= 0 ? ageEnfant : null,
         tranche_age_id: trancheAgeId && trancheAgeId > 0 ? trancheAgeId : null,
+        supplement_id: supplementId && supplementId > 0 ? supplementId : null,
         date_naissance: emptyToNull(item.date_naissance),
         piece_identite: emptyToNull(item.piece_identite?.trim()),
         allergies_regime: emptyToNull(item.allergies_regime?.trim()),
@@ -203,15 +207,18 @@ async function fetchOccupants(connection, reservationId) {
         o.prenom,
         o.age_enfant,
         o.tranche_age_id,
+        o.supplement_id,
         o.date_naissance,
         o.piece_identite,
         o.allergies_regime,
         o.prix_unitaire,
         o.prix_total,
         o.date_creation,
-        ta.nom AS tranche_age_nom
+        ta.nom AS tranche_age_nom,
+        s.nom AS supplement_nom
       FROM reservation_occupants o
       LEFT JOIN tranches_age ta ON ta.id = o.tranche_age_id
+      LEFT JOIN supplements s ON s.id = o.supplement_id
       WHERE o.reservation_id = ?
       ORDER BY
         FIELD(o.type_occupant, 'adulte', 'enfant', 'bebe'),
@@ -233,9 +240,9 @@ async function syncReservationOccupants(connection, reservationId, occupants) {
       `
         INSERT INTO reservation_occupants (
           reservation_id, type_occupant, nom, prenom,
-          age_enfant, tranche_age_id, date_naissance, piece_identite,
+          age_enfant, tranche_age_id, supplement_id, date_naissance, piece_identite,
           allergies_regime, prix_unitaire, prix_total
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reservationId,
@@ -244,6 +251,7 @@ async function syncReservationOccupants(connection, reservationId, occupants) {
         occupant.prenom,
         occupant.age_enfant,
         occupant.tranche_age_id,
+        occupant.supplement_id,
         occupant.date_naissance,
         occupant.piece_identite,
         occupant.allergies_regime,
@@ -742,10 +750,201 @@ async function deleteReservation(req, res) {
   }
 }
 
+async function findOrCreatePublicClient(connection, clientInput = {}) {
+  const nom = emptyToNull(String(clientInput.nom || "").trim());
+  const prenom = emptyToNull(String(clientInput.prenom || "").trim());
+  const email = emptyToNull(String(clientInput.email || "").trim().toLowerCase());
+  const telephone = emptyToNull(String(clientInput.telephone || "").trim());
+  const civilite = emptyToNull(String(clientInput.civilite || "").trim());
+  const dateNaissance = emptyToNull(String(clientInput.date_naissance || "").trim());
+  const numeroPiece = emptyToNull(
+    String(clientInput.piece_identite || clientInput.numero_piece || "").trim()
+  );
+  const typePieceRaw = emptyToNull(String(clientInput.type_piece || "").trim());
+  const typePiece =
+    typePieceRaw && ["CIN", "Passeport", "Carte_sejour"].includes(typePieceRaw)
+      ? typePieceRaw
+      : null;
+
+  if (!nom) {
+    return { error: "Le nom du client est obligatoire." };
+  }
+
+  if (!email) {
+    return { error: "L'email est obligatoire." };
+  }
+
+  if (!telephone) {
+    return { error: "Le téléphone est obligatoire." };
+  }
+
+  const [existing] = await connection.query(
+    "SELECT id FROM clients WHERE LOWER(email) = ? LIMIT 1",
+    [email]
+  );
+
+  if (existing.length > 0) {
+    await connection.query(
+      `
+        UPDATE clients SET
+          civilite = COALESCE(?, civilite),
+          nom = ?,
+          prenom = COALESCE(?, prenom),
+          telephone = COALESCE(?, telephone),
+          date_naissance = COALESCE(?, date_naissance),
+          type_piece = COALESCE(?, type_piece),
+          numero_piece = COALESCE(?, numero_piece)
+        WHERE id = ?
+      `,
+      [civilite, nom, prenom, telephone, dateNaissance, typePiece, numeroPiece, existing[0].id]
+    );
+
+    return { clientId: existing[0].id };
+  }
+
+  const [result] = await connection.query(
+    `
+      INSERT INTO clients (
+        civilite, nom, prenom, date_naissance, type_piece, numero_piece,
+        email, telephone, pays,
+        is_vip, nb_reservations_total, montant_total_depense
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Maroc', 0, 0, 0)
+    `,
+    [civilite, nom, prenom, dateNaissance, typePiece, numeroPiece, email, telephone]
+  );
+
+  return { clientId: result.insertId };
+}
+
+async function createPublicReservation(req, res) {
+  const connection = await pool.getConnection();
+
+  try {
+    const clientResult = await findOrCreatePublicClient(connection, req.body.client);
+
+    if (clientResult.error) {
+      return res.status(400).json({ message: clientResult.error });
+    }
+
+    const fields = pickReservationFields({
+      ...req.body,
+      client_id: clientResult.clientId,
+      source: "site_web",
+      statut_reservation: "en_attente",
+      statut_paiement: "non_paye",
+      montant_paye: 0,
+      promotion_id: req.body.promotion_id ?? null,
+      type_reduction: req.body.type_reduction ?? null,
+      valeur_reduction: req.body.valeur_reduction ?? 0,
+      supplement_id: null,
+    });
+
+    const occupants = pickOccupants(req.body);
+
+    for (const occupant of occupants) {
+      if (!occupant.nom || !occupant.prenom) {
+        return res.status(400).json({
+          message: "Chaque occupant doit avoir un nom et un prénom.",
+        });
+      }
+    }
+
+    const [maisonRows] = await connection.query(
+      "SELECT id FROM maisons_hotes WHERE id = ? AND statut = 'actif' LIMIT 1",
+      [fields.maison_id]
+    );
+
+    if (maisonRows.length === 0) {
+      return res.status(400).json({ message: "Maison d'hôtes introuvable ou inactive." });
+    }
+
+    const validationError = await validateReservationRelations(connection, fields);
+
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const occupantsError = validateOccupants(fields, occupants);
+
+    if (occupantsError) {
+      return res.status(400).json({ message: occupantsError });
+    }
+
+    if (occupants.some((item) => item.type_occupant === "enfant")) {
+      const firstChild = occupants.find((item) => item.type_occupant === "enfant");
+      fields.age_enfant = firstChild?.age_enfant ?? 0;
+    }
+
+    await connection.beginTransaction();
+
+    const reference = await generateReference(connection);
+
+    const [result] = await connection.query(
+      `
+        INSERT INTO reservations (
+          reference, client_id, chambre_id, maison_id,
+          date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, age_enfant,
+          source, promotion_id, type_reduction, valeur_reduction, supplement_id,
+          prix_chambre_total, prix_bebe_total, prix_enfants_total,
+          prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc,
+          statut_reservation, statut_paiement, montant_paye, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        reference,
+        fields.client_id,
+        fields.chambre_id,
+        fields.maison_id,
+        fields.date_arrivee,
+        fields.date_depart,
+        fields.nb_nuits,
+        fields.nb_adultes,
+        fields.nbrs_enfants,
+        fields.nbrs_bebe,
+        fields.age_enfant,
+        fields.source,
+        fields.promotion_id,
+        fields.type_reduction,
+        fields.valeur_reduction,
+        fields.supplement_id,
+        fields.prix_chambre_total,
+        fields.prix_bebe_total,
+        fields.prix_enfants_total,
+        fields.prix_total_ht,
+        fields.taux_tva_applique,
+        fields.montant_tva,
+        fields.prix_total_ttc,
+        fields.statut_reservation,
+        fields.statut_paiement,
+        fields.montant_paye,
+        fields.notes,
+      ]
+    );
+
+    await syncReservationOccupants(connection, result.insertId, occupants);
+    await syncClientReservationStats(connection, fields.client_id);
+    await connection.commit();
+
+    const reservation = await fetchReservationById(pool, result.insertId);
+
+    return res.status(201).json({
+      message: "Demande de réservation enregistrée avec succès.",
+      reservation,
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error("Error creating public reservation:", error);
+    return res.status(500).json({ message: "Impossible d'enregistrer la réservation." });
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   getReservations,
   getReservationById,
   createReservation,
   updateReservation,
   deleteReservation,
+  createPublicReservation,
 };

@@ -12,6 +12,7 @@ export type AuthUser = {
 };
 
 const AUTH_TOKEN_KEY = "marocresidences.auth.token";
+export const AUTH_CHANGED_EVENT = "marocresidences:auth-changed";
 
 function logAuth(scope: string, data?: unknown) {
   console.log(`[AUTH] ${scope}`, data ?? "");
@@ -19,6 +20,14 @@ function logAuth(scope: string, data?: unknown) {
 
 function logAuthError(scope: string, error: unknown) {
   console.error(`[AUTH ERROR] ${scope}`, error);
+}
+
+export function notifyAuthChanged() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 }
 
 export function getApiBaseUrl() {
@@ -53,6 +62,7 @@ export function saveAuthToken(token: string, persist = true) {
 
   otherStorage.removeItem(AUTH_TOKEN_KEY);
   storage.setItem(AUTH_TOKEN_KEY, token);
+  notifyAuthChanged();
 }
 
 export function clearAuthToken() {
@@ -62,6 +72,7 @@ export function clearAuthToken() {
 
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
   window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  notifyAuthChanged();
 }
 
 export async function fetchCurrentUser(token: string) {

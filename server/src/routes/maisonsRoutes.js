@@ -2,6 +2,7 @@ const express = require("express");
 
 const {
   getMaisons,
+  getMaisonsCatalog,
   getMaisonById,
   createMaison,
   updateMaison,
@@ -15,6 +16,7 @@ const router = express.Router();
 const staffOnly = [requireAuth, requireStaff];
 
 router.get("/meta/references", ...staffOnly, getReferenceData);
+router.get("/catalog", getMaisonsCatalog);
 router.post("/upload", ...staffOnly, (req, res) => {
   uploadPhoto(req, res, (error) => {
     if (error) {

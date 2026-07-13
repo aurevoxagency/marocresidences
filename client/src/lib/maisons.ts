@@ -46,6 +46,9 @@ export type MaisonListItem = {
   heure_checkin: string | null;
   heure_checkout: string | null;
   photo_principale?: string | null;
+  prix_adulte_min?: number | string | null;
+  services?: string[];
+  equipements?: string[];
   date_creation: string;
   date_maj: string;
 };
@@ -132,6 +135,19 @@ async function parseResponse<T>(response: Response): Promise<T> {
   }
 
   return data;
+}
+
+export async function fetchMaisonsCatalog(query?: string) {
+  const params = new URLSearchParams();
+
+  if (query?.trim()) {
+    params.set("q", query.trim());
+  }
+
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${getApiBaseUrl()}/maisons/catalog${suffix}`);
+
+  return parseResponse<MaisonListItem[]>(response);
 }
 
 export async function fetchMaisons() {

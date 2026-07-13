@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getApiBaseUrl, requestPasswordReset, saveAuthToken, type AuthUser } from "@/lib/auth";
+import { ROLE_IDS } from "@/lib/roles";
 
 function logClientAuth(scope: string, data?: unknown) {
   console.log(`[CLIENT AUTH] ${scope}`, data ?? "");
@@ -29,6 +30,10 @@ type AuthDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultTab?: "login" | "register";
+  /** Banner shown above the form (e.g. reservation requires login). */
+  message?: string;
+  /** If provided, called after login instead of the default redirect. */
+  onAuthSuccess?: (user?: AuthUser) => void | Promise<void>;
 };
 
 type AuthView = "login" | "register" | "forgot";
@@ -123,7 +128,13 @@ function Field({
   );
 }
 
-export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDialogProps) {
+export function AuthDialog({
+  open,
+  onOpenChange,
+  defaultTab = "login",
+  message,
+  onAuthSuccess,
+}: AuthDialogProps) {
   const navigate = useNavigate();
   const [view, setView] = useState<AuthView>(defaultTab);
   const [tab, setTab] = useState(defaultTab);
@@ -174,11 +185,24 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
     onOpenChange(next);
   };
 
-  const handleAuthSuccess = async (token: string) => {
-    logClientAuth("Login success, redirecting to dashboard");
+  const handleAuthSuccess = async (token: string, user?: AuthUser) => {
     saveAuthToken(token, remember);
     resetState();
     onOpenChange(false);
+
+    if (onAuthSuccess) {
+      logClientAuth("Login success, running custom onAuthSuccess");
+      await onAuthSuccess(user);
+      return;
+    }
+
+    // Les clients restent sur la page actuelle (ex. accueil)
+    if (Number(user?.role_id) === ROLE_IDS.CLIENT) {
+      logClientAuth("Client login success, staying on current page");
+      return;
+    }
+
+    logClientAuth("Staff login success, redirecting to dashboard");
     await navigate({ to: "/dashboard" });
   };
 
@@ -226,7 +250,7 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
         throw new Error(data.message || "Connexion impossible.");
       }
 
-      await handleAuthSuccess(data.token);
+      await handleAuthSuccess(data.token, data.user);
     } catch (error) {
       logClientAuthError("Login failed", error);
       setErrorMessage(error instanceof Error ? error.message : "Connexion impossible.");
@@ -337,6 +361,18 @@ export function AuthDialog({ open, onOpenChange, defaultTab = "login" }: AuthDia
                 Connectez-vous ou créez un compte pour réserver vos séjours au Maroc.
               </DialogDescription>
             </div>
+            {message ? (
+              <div
+                className="w-full rounded-2xl border px-4 py-3 text-left text-sm"
+                style={{
+                  borderColor: "color-mix(in oklab, var(--terracotta) 35%, transparent)",
+                  background: "color-mix(in oklab, var(--terracotta) 10%, white)",
+                  color: "var(--ink)",
+                }}
+              >
+                {message}
+              </div>
+            ) : null}
           </DialogHeader>
         </div>
 

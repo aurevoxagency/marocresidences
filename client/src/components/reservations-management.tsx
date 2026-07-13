@@ -73,7 +73,7 @@ import {
   calculateBebeStayTotal,
   calculateEnfantStayTotal,
   calculateEnfantsStayTotalFromAges,
-  calculateSupplementStayTotal,
+  calculateOccupantSupplementStayTotal,
   findTrancheTarifForAge,
   getBebeTranche,
   getEnfantAgeOptions,
@@ -233,6 +233,9 @@ type OccupantFormState = {
   prenom: string;
   age_enfant: string;
   tranche_age_id: string;
+  supplement_id: string;
+  date_naissance: string;
+  piece_identite: string;
 };
 
 function emptyOccupant(
@@ -247,6 +250,9 @@ function emptyOccupant(
     prenom: seed?.prenom || "",
     age_enfant: seed?.age_enfant || "",
     tranche_age_id: seed?.tranche_age_id || "",
+    supplement_id: seed?.supplement_id || "",
+    date_naissance: seed?.date_naissance || "",
+    piece_identite: seed?.piece_identite || "",
   };
 }
 
@@ -291,6 +297,9 @@ function occupantsFromReservation(
             ? String(occupant.age_enfant)
             : "",
         tranche_age_id: occupant.tranche_age_id ? String(occupant.tranche_age_id) : "",
+        supplement_id: occupant.supplement_id ? String(occupant.supplement_id) : "",
+        date_naissance: dateInput(occupant.date_naissance),
+        piece_identite: occupant.piece_identite || "",
       })
     );
   }
@@ -634,41 +643,37 @@ export function ReservationsManagement() {
     [saisons, form.date_arrivee]
   );
 
-  const selectedSupplement = useMemo(
-    () => supplements.find((item) => String(item.id) === form.supplement_id),
-    [supplements, form.supplement_id]
+  const getOccupantSupplementAmount = useCallback(
+    (occupant: OccupantFormState) => {
+      if (!occupant.supplement_id) {
+        return 0;
+      }
+
+      const supplement = supplements.find(
+        (item) => String(item.id) === occupant.supplement_id
+      );
+
+      return calculateOccupantSupplementStayTotal(
+        supplement,
+        saisonId,
+        occupant.type_occupant,
+        occupant.age_enfant ? Number(occupant.age_enfant) : null,
+        nbNuits,
+        tranchesAge,
+        selectedPromotion
+      );
+    },
+    [supplements, saisonId, nbNuits, tranchesAge, selectedPromotion]
   );
 
-  const supplementTotal = useMemo(() => {
-    if (!form.supplement_id) {
-      return 0;
-    }
-
-    return calculateSupplementStayTotal(
-      selectedSupplement,
-      saisonId,
-      {
-        nbAdultes,
-        nbrsEnfants,
-        nbrsBebe,
-        ageEnfant,
-        nbNuits,
-      },
-      tranchesAge,
-      selectedPromotion
-    );
-  }, [
-    form.supplement_id,
-    selectedSupplement,
-    saisonId,
-    nbAdultes,
-    nbrsEnfants,
-    nbrsBebe,
-    ageEnfant,
-    nbNuits,
-    tranchesAge,
-    selectedPromotion,
-  ]);
+  const supplementTotal = useMemo(
+    () =>
+      occupants.reduce(
+        (total, occupant) => total + getOccupantSupplementAmount(occupant),
+        0
+      ),
+    [occupants, getOccupantSupplementAmount]
+  );
 
   useEffect(() => {
     const maisonId = Number(form.maison_id);
@@ -939,6 +944,7 @@ export function ReservationsManagement() {
           prenom: occupant.prenom,
           age_enfant: occupant.age_enfant,
           tranche_age_id: occupant.tranche_age_id,
+          supplement_id: occupant.supplement_id ?? null,
           date_naissance: occupant.date_naissance ?? null,
           piece_identite: occupant.piece_identite ?? null,
           allergies_regime: occupant.allergies_regime ?? null,
@@ -965,8 +971,11 @@ export function ReservationsManagement() {
     setErrorMessage("");
 
     try {
-      const maison = await loadMaisonForReservation(reservation.maison_id);
-      await downloadReservationSheetPdf(reservation, maison);
+      const [detailed, maison] = await Promise.all([
+        fetchReservation(reservation.id),
+        loadMaisonForReservation(reservation.maison_id),
+      ]);
+      await downloadReservationSheetPdf(detailed, maison);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Impossible de télécharger la fiche PDF."
@@ -1132,14 +1141,23 @@ export function ReservationsManagement() {
           ) ?? 0;
       }
 
+      const supplementAmount = getOccupantSupplementAmount(occupant);
+      const prixTotal = Math.round((prixUnitaire + supplementAmount) * 100) / 100;
+
       return {
         type_occupant: occupant.type_occupant,
         nom: occupant.nom.trim(),
         prenom: occupant.prenom.trim(),
         age_enfant: age,
         tranche_age_id: trancheId,
+        supplement_id: occupant.supplement_id ? Number(occupant.supplement_id) : null,
+        date_naissance: occupant.date_naissance || null,
+        piece_identite:
+          occupant.type_occupant === "adulte"
+            ? occupant.piece_identite.trim() || null
+            : null,
         prix_unitaire: prixUnitaire,
-        prix_total: prixUnitaire,
+        prix_total: prixTotal,
       };
     });
   };
@@ -1172,7 +1190,7 @@ export function ReservationsManagement() {
       promotion_id: form.promotion_id ? Number(form.promotion_id) : null,
       type_reduction: form.type_reduction || null,
       valeur_reduction: Number(form.valeur_reduction) || 0,
-      supplement_id: form.supplement_id ? Number(form.supplement_id) : null,
+      supplement_id: null,
       prix_chambre_total: Number(form.prix_chambre_total) || 0,
       prix_bebe_total: Number(form.prix_bebe_total) || 0,
       prix_enfants_total: Number(form.prix_enfants_total) || 0,
@@ -1418,7 +1436,7 @@ export function ReservationsManagement() {
             <p className="text-[13px] text-slate-500">
               {formStep === "details"
                 ? "Étape 1/2 — Détails du séjour"
-                : "Étape 2/2 — Occupants (noms et âges)"}
+                : "Étape 2/2 — Occupants et tarification"}
             </p>
           </DialogHeader>
 
@@ -1450,7 +1468,7 @@ export function ReservationsManagement() {
                   <Label>Maison d&apos;hôtes *</Label>
                   <Select
                     value={form.maison_id || undefined}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
                       setForm((c) => ({
                         ...c,
                         maison_id: value,
@@ -1459,8 +1477,11 @@ export function ReservationsManagement() {
                         prix_chambre_total: "0",
                         prix_bebe_total: "0",
                         prix_enfants_total: "0",
-                      }))
-                    }
+                      }));
+                      setOccupants((current) =>
+                        current.map((occupant) => ({ ...occupant, supplement_id: "" }))
+                      );
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Maison" />
@@ -1624,37 +1645,410 @@ export function ReservationsManagement() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Supplément</Label>
-                  <Select
-                    value={form.supplement_id || "none"}
-                    onValueChange={(value) =>
-                      setForm((c) => ({ ...c, supplement_id: value === "none" ? "" : value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Aucun" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Aucun</SelectItem>
-                      {supplements.map((supplement) => (
-                        <SelectItem key={supplement.id} value={String(supplement.id)}>
-                          {supplement.nom}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {form.supplement_id ? (
-                    <p className="text-[11px] text-slate-500">
-                      {supplementTotal > 0
-                        ? `Tarif supplément : ${supplementTotal.toLocaleString("fr-FR")} MAD${selectedPromotion ? " (promo)" : ""}`
-                        : "Aucun tarif configuré pour ce supplément et cette saison."}
-                    </p>
-                  ) : null}
-                </div>
               </div>
             </section>
+
+            <section className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Statut réservation</Label>
+                <Select
+                  value={form.statut_reservation}
+                  onValueChange={(value) =>
+                    setForm((c) => ({ ...c, statut_reservation: value as ReservationStatut }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(STATUT_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Statut paiement</Label>
+                <Select
+                  value={form.statut_paiement}
+                  onValueChange={(value) =>
+                    setForm((c) => ({
+                      ...c,
+                      statut_paiement: value as ReservationStatutPaiement,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAIEMENT_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => setForm((c) => ({ ...c, notes: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+            </section>
+
+            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          </div>
+          ) : (
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold text-slate-800">Adultes ({nbAdultes})</h3>
+              <div className="space-y-3">
+                {occupants
+                  .filter((item) => item.type_occupant === "adulte")
+                  .map((occupant, index) => {
+                    const basePrice = selectedChambre
+                      ? calculateChambreStayTotal(
+                          selectedChambre.prix_adulte,
+                          Math.max(nbNuits, 1),
+                          selectedPromotion
+                        )
+                      : Number(form.prix_chambre_total) / Math.max(nbAdultes, 1);
+                    const supplementAmount = getOccupantSupplementAmount(occupant);
+
+                    return (
+                    <div
+                      key={occupant.key}
+                      className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                    >
+                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
+                          <span>Adulte {index + 1}</span>
+                          <span className="font-medium text-slate-700">
+                            {formatMoney((Number(basePrice) || 0) + supplementAmount)}
+                          </span>
+                        </p>
+                      <div className="space-y-2">
+                        <Label>Prénom *</Label>
+                        <Input
+                          value={occupant.prenom}
+                          onChange={(e) =>
+                            updateOccupant(occupant.key, { prenom: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Nom *</Label>
+                        <Input
+                          value={occupant.nom}
+                          onChange={(e) =>
+                            updateOccupant(occupant.key, { nom: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Date de naissance</Label>
+                        <Input
+                          type="date"
+                          value={occupant.date_naissance}
+                          onChange={(e) =>
+                            updateOccupant(occupant.key, {
+                              date_naissance: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Pièce d&apos;identité</Label>
+                        <Input
+                          value={occupant.piece_identite}
+                          onChange={(e) =>
+                            updateOccupant(occupant.key, {
+                              piece_identite: e.target.value,
+                            })
+                          }
+                          placeholder="CIN, passeport…"
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Supplément</Label>
+                        <Select
+                          value={occupant.supplement_id || "none"}
+                          onValueChange={(value) =>
+                            updateOccupant(occupant.key, {
+                              supplement_id: value === "none" ? "" : value,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Aucun" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Aucun</SelectItem>
+                            {supplements.map((supplement) => (
+                              <SelectItem key={supplement.id} value={String(supplement.id)}>
+                                {supplement.nom}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {occupant.supplement_id ? (
+                          <p className="text-[11px] text-slate-500">
+                            {supplementAmount > 0
+                              ? `Supplément : ${supplementAmount.toLocaleString("fr-FR")} MAD (${nbNuits || 1} nuit${(nbNuits || 1) > 1 ? "s" : ""})`
+                              : "Aucun tarif configuré pour ce supplément et cette saison."}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    );
+                  })}
+              </div>
+            </section>
+
+            {nbrsEnfants > 0 ? (
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-800">Enfants ({nbrsEnfants})</h3>
+                <div className="space-y-3">
+                  {occupants
+                    .filter((item) => item.type_occupant === "enfant")
+                    .map((occupant, index) => {
+                      const basePrice =
+                        occupant.age_enfant && selectedChambre
+                          ? calculateEnfantStayTotal(
+                              selectedChambre,
+                              Math.max(nbNuits, 1),
+                              Number(occupant.age_enfant),
+                              selectedPromotion
+                            )
+                          : null;
+                      const supplementAmount = getOccupantSupplementAmount(occupant);
+
+                      return (
+                      <div
+                        key={occupant.key}
+                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                      >
+                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
+                          <span>Enfant {index + 1}</span>
+                          <span className="font-medium text-slate-700">
+                            {basePrice != null
+                              ? formatMoney(basePrice + supplementAmount)
+                              : "—"}
+                          </span>
+                        </p>
+                        <div className="space-y-2">
+                          <Label>Prénom *</Label>
+                          <Input
+                            value={occupant.prenom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { prenom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nom *</Label>
+                          <Input
+                            value={occupant.nom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { nom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Date de naissance</Label>
+                          <Input
+                            type="date"
+                            value={occupant.date_naissance}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, {
+                                date_naissance: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Supplément</Label>
+                          <Select
+                            value={occupant.supplement_id || "none"}
+                            onValueChange={(value) =>
+                              updateOccupant(occupant.key, {
+                                supplement_id: value === "none" ? "" : value,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Aucun" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Aucun</SelectItem>
+                              {supplements.map((supplement) => (
+                                <SelectItem key={supplement.id} value={String(supplement.id)}>
+                                  {supplement.nom}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {occupant.supplement_id ? (
+                            <p className="text-[11px] text-slate-500">
+                              {supplementAmount > 0
+                                ? `Supplément : ${supplementAmount.toLocaleString("fr-FR")} MAD (${nbNuits || 1} nuit${(nbNuits || 1) > 1 ? "s" : ""})`
+                                : "Aucun tarif configuré pour ce supplément et cette saison."}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label>Âge de l&apos;enfant *</Label>
+                          <Select
+                            value={occupant.age_enfant || undefined}
+                            onValueChange={(value) => {
+                              const age = Number(value);
+                              const trancheId = resolveTrancheAgeId(tranchesAge, age);
+                              updateOccupant(occupant.key, {
+                                age_enfant: value,
+                                tranche_age_id: trancheId ? String(trancheId) : "",
+                              });
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Sélectionner l'âge" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {enfantAgeOptions.length > 0 ? (
+                                enfantAgeOptions.map((option) => (
+                                  <SelectItem key={option.age} value={String(option.age)}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="none" disabled>
+                                  Aucune tranche enfant pour cette chambre
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          {occupant.age_enfant ? (
+                            <p className="text-[11px] text-slate-500">
+                              {(() => {
+                                const age = Number(occupant.age_enfant);
+                                const tranche = tranchesAge.find(
+                                  (item) =>
+                                    Number(occupant.tranche_age_id) === item.id ||
+                                    (age >= item.age_min && age <= item.age_max)
+                                );
+                                return tranche
+                                  ? `Tranche : ${tranche.nom} (${tranche.age_min}-${tranche.age_max} ans)`
+                                  : "Tranche d'âge non trouvée pour cet âge.";
+                              })()}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      );
+                    })}
+                </div>
+              </section>
+            ) : null}
+
+            {nbrsBebe > 0 ? (
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold text-slate-800">Bébés ({nbrsBebe})</h3>
+                <div className="space-y-3">
+                  {occupants
+                    .filter((item) => item.type_occupant === "bebe")
+                    .map((occupant, index) => {
+                      const basePrice = selectedChambre
+                        ? calculateBebeStayTotal(
+                            selectedChambre,
+                            Math.max(nbNuits, 1),
+                            selectedPromotion
+                          )
+                        : Number(form.prix_bebe_total) / Math.max(nbrsBebe, 1);
+                      const supplementAmount = getOccupantSupplementAmount(occupant);
+
+                      return (
+                      <div
+                        key={occupant.key}
+                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                      >
+                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
+                          <span>Bébé {index + 1}</span>
+                          <span className="font-medium text-slate-700">
+                            {formatMoney((Number(basePrice) || 0) + supplementAmount)}
+                          </span>
+                        </p>
+                        <div className="space-y-2">
+                          <Label>Prénom *</Label>
+                          <Input
+                            value={occupant.prenom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { prenom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Nom *</Label>
+                          <Input
+                            value={occupant.nom}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, { nom: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Date de naissance</Label>
+                          <Input
+                            type="date"
+                            value={occupant.date_naissance}
+                            onChange={(e) =>
+                              updateOccupant(occupant.key, {
+                                date_naissance: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Supplément</Label>
+                          <Select
+                            value={occupant.supplement_id || "none"}
+                            onValueChange={(value) =>
+                              updateOccupant(occupant.key, {
+                                supplement_id: value === "none" ? "" : value,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Aucun" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Aucun</SelectItem>
+                              {supplements.map((supplement) => (
+                                <SelectItem key={supplement.id} value={String(supplement.id)}>
+                                  {supplement.nom}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {occupant.supplement_id ? (
+                            <p className="text-[11px] text-slate-500">
+                              {supplementAmount > 0
+                                ? `Supplément : ${supplementAmount.toLocaleString("fr-FR")} MAD (${nbNuits || 1} nuit${(nbNuits || 1) > 1 ? "s" : ""})`
+                                : "Aucun tarif configuré pour ce supplément et cette saison."}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      );
+                    })}
+                </div>
+              </section>
+            ) : null}
 
             <section className="space-y-4">
               <h3 className="text-sm font-semibold text-slate-800">Tarification</h3>
@@ -1745,7 +2139,7 @@ export function ReservationsManagement() {
                         }
 
                         if (enfantAges.length === 0 || !selectedChambre) {
-                          return "Les âges des enfants seront définis à l'étape Occupants.";
+                          return "Saisissez les âges des enfants ci-dessus pour calculer ce tarif.";
                         }
 
                         const bebeTranche = getBebeTranche(selectedChambre);
@@ -1846,258 +2240,6 @@ export function ReservationsManagement() {
                 </p>
               </div>
             </section>
-
-            <section className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Statut réservation</Label>
-                <Select
-                  value={form.statut_reservation}
-                  onValueChange={(value) =>
-                    setForm((c) => ({ ...c, statut_reservation: value as ReservationStatut }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(STATUT_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Statut paiement</Label>
-                <Select
-                  value={form.statut_paiement}
-                  onValueChange={(value) =>
-                    setForm((c) => ({
-                      ...c,
-                      statut_paiement: value as ReservationStatutPaiement,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PAIEMENT_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Notes</Label>
-                <Textarea
-                  value={form.notes}
-                  onChange={(e) => setForm((c) => ({ ...c, notes: e.target.value }))}
-                  rows={3}
-                />
-              </div>
-            </section>
-
-            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
-          </div>
-          ) : (
-          <div className="space-y-6">
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-800">Adultes ({nbAdultes})</h3>
-              <div className="space-y-3">
-                {occupants
-                  .filter((item) => item.type_occupant === "adulte")
-                  .map((occupant, index) => (
-                    <div
-                      key={occupant.key}
-                      className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
-                    >
-                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
-                          <span>Adulte {index + 1}</span>
-                          <span className="font-medium text-slate-700">
-                            {formatMoney(
-                              selectedChambre
-                                ? calculateChambreStayTotal(
-                                    selectedChambre.prix_adulte,
-                                    Math.max(nbNuits, 1),
-                                    selectedPromotion
-                                  )
-                                : Number(form.prix_chambre_total) / Math.max(nbAdultes, 1)
-                            )}
-                          </span>
-                        </p>
-                      <div className="space-y-2">
-                        <Label>Prénom *</Label>
-                        <Input
-                          value={occupant.prenom}
-                          onChange={(e) =>
-                            updateOccupant(occupant.key, { prenom: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Nom *</Label>
-                        <Input
-                          value={occupant.nom}
-                          onChange={(e) =>
-                            updateOccupant(occupant.key, { nom: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </section>
-
-            {nbrsEnfants > 0 ? (
-              <section className="space-y-4">
-                <h3 className="text-sm font-semibold text-slate-800">Enfants ({nbrsEnfants})</h3>
-                <div className="space-y-3">
-                  {occupants
-                    .filter((item) => item.type_occupant === "enfant")
-                    .map((occupant, index) => (
-                      <div
-                        key={occupant.key}
-                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
-                      >
-                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
-                          <span>Enfant {index + 1}</span>
-                          <span className="font-medium text-slate-700">
-                            {occupant.age_enfant && selectedChambre
-                              ? formatMoney(
-                                  calculateEnfantStayTotal(
-                                    selectedChambre,
-                                    Math.max(nbNuits, 1),
-                                    Number(occupant.age_enfant),
-                                    selectedPromotion
-                                  )
-                                )
-                              : "—"}
-                          </span>
-                        </p>
-                        <div className="space-y-2">
-                          <Label>Prénom *</Label>
-                          <Input
-                            value={occupant.prenom}
-                            onChange={(e) =>
-                              updateOccupant(occupant.key, { prenom: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Nom *</Label>
-                          <Input
-                            value={occupant.nom}
-                            onChange={(e) =>
-                              updateOccupant(occupant.key, { nom: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label>Âge de l&apos;enfant *</Label>
-                          <Select
-                            value={occupant.age_enfant || undefined}
-                            onValueChange={(value) => {
-                              const age = Number(value);
-                              const trancheId = resolveTrancheAgeId(tranchesAge, age);
-                              updateOccupant(occupant.key, {
-                                age_enfant: value,
-                                tranche_age_id: trancheId ? String(trancheId) : "",
-                              });
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Sélectionner l'âge" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {enfantAgeOptions.length > 0 ? (
-                                enfantAgeOptions.map((option) => (
-                                  <SelectItem key={option.age} value={String(option.age)}>
-                                    {option.label}
-                                  </SelectItem>
-                                ))
-                              ) : (
-                                <SelectItem value="none" disabled>
-                                  Aucune tranche enfant pour cette chambre
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-                          {occupant.age_enfant ? (
-                            <p className="text-[11px] text-slate-500">
-                              {(() => {
-                                const age = Number(occupant.age_enfant);
-                                const tranche = tranchesAge.find(
-                                  (item) =>
-                                    Number(occupant.tranche_age_id) === item.id ||
-                                    (age >= item.age_min && age <= item.age_max)
-                                );
-                                return tranche
-                                  ? `Tranche : ${tranche.nom} (${tranche.age_min}-${tranche.age_max} ans)`
-                                  : "Tranche d'âge non trouvée pour cet âge.";
-                              })()}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </section>
-            ) : null}
-
-            {nbrsBebe > 0 ? (
-              <section className="space-y-4">
-                <h3 className="text-sm font-semibold text-slate-800">Bébés ({nbrsBebe})</h3>
-                <div className="space-y-3">
-                  {occupants
-                    .filter((item) => item.type_occupant === "bebe")
-                    .map((occupant, index) => (
-                      <div
-                        key={occupant.key}
-                        className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
-                      >
-                        <p className="sm:col-span-2 flex items-center justify-between text-[12px] font-semibold text-slate-500">
-                          <span>Bébé {index + 1}</span>
-                          <span className="font-medium text-slate-700">
-                            {formatMoney(
-                              selectedChambre
-                                ? calculateBebeStayTotal(
-                                    selectedChambre,
-                                    Math.max(nbNuits, 1),
-                                    selectedPromotion
-                                  )
-                                : Number(form.prix_bebe_total) / Math.max(nbrsBebe, 1)
-                            )}
-                          </span>
-                        </p>
-                        <div className="space-y-2">
-                          <Label>Prénom *</Label>
-                          <Input
-                            value={occupant.prenom}
-                            onChange={(e) =>
-                              updateOccupant(occupant.key, { prenom: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Nom *</Label>
-                          <Input
-                            value={occupant.nom}
-                            onChange={(e) =>
-                              updateOccupant(occupant.key, { nom: e.target.value })
-                            }
-                          />
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </section>
-            ) : null}
 
             <section className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] text-slate-700">
               <h3 className="mb-2 text-sm font-semibold text-slate-800">Récapitulatif tarifaire</h3>
@@ -2293,32 +2435,112 @@ export function ReservationsManagement() {
                     <FicheInfoItem label="Bébés" value={viewReservation.nbrs_bebe} />
                   </div>
                   {viewReservation.occupants && viewReservation.occupants.length > 0 ? (
-                    <div className="space-y-2 rounded-2xl border border-slate-200 p-4">
-                      {viewReservation.occupants.map((occupant, index) => (
-                        <div
-                          key={occupant.id ?? `${occupant.type_occupant}-${index}`}
-                          className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 py-2 last:border-0"
-                        >
-                          <div>
-                            <p className="text-[13px] font-medium text-slate-800">
-                              {[occupant.prenom, occupant.nom].filter(Boolean).join(" ") || "—"}
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              {occupant.type_occupant === "adulte"
-                                ? "Adulte"
-                                : occupant.type_occupant === "enfant"
-                                  ? "Enfant"
-                                  : "Bébé"}
-                              {occupant.type_occupant === "enfant" && occupant.age_enfant != null
-                                ? ` · ${occupant.age_enfant} an${Number(occupant.age_enfant) > 1 ? "s" : ""}`
-                                : ""}
-                              {occupant.tranche_age_nom
-                                ? ` · ${occupant.tranche_age_nom}`
-                                : ""}
-                            </p>
+                    <div className="space-y-3">
+                      {viewReservation.occupants.map((occupant, index) => {
+                        const typeLabel =
+                          occupant.type_occupant === "adulte"
+                            ? "Adulte"
+                            : occupant.type_occupant === "enfant"
+                              ? "Enfant"
+                              : "Bébé";
+                        const typeIndex =
+                          viewReservation.occupants!
+                            .slice(0, index + 1)
+                            .filter((item) => item.type_occupant === occupant.type_occupant)
+                            .length;
+                        const basePrice = Number(occupant.prix_unitaire) || 0;
+                        const totalPrice = Number(occupant.prix_total) || 0;
+                        const supplementPrice = Math.max(0, totalPrice - basePrice);
+
+                        return (
+                          <div
+                            key={occupant.id ?? `${occupant.type_occupant}-${index}`}
+                            className="rounded-2xl border border-slate-200 p-4"
+                          >
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                              <div>
+                                <p className="text-[13px] font-semibold text-slate-900">
+                                  {typeLabel} {typeIndex}
+                                  {" · "}
+                                  {[occupant.prenom, occupant.nom].filter(Boolean).join(" ") ||
+                                    "—"}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-slate-500">
+                                  {occupant.type_occupant === "enfant" &&
+                                  occupant.age_enfant != null
+                                    ? `${occupant.age_enfant} an${Number(occupant.age_enfant) > 1 ? "s" : ""}`
+                                    : typeLabel}
+                                  {occupant.tranche_age_nom
+                                    ? ` · ${occupant.tranche_age_nom}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <p className="text-[13px] font-semibold text-slate-800">
+                                {formatMoney(totalPrice)}
+                              </p>
+                            </div>
+
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <FicheInfoItem label="Prénom" value={occupant.prenom} />
+                              <FicheInfoItem label="Nom" value={occupant.nom} />
+                              <FicheInfoItem
+                                label="Date de naissance"
+                                value={
+                                  occupant.date_naissance
+                                    ? formatDateDisplay(occupant.date_naissance)
+                                    : "—"
+                                }
+                              />
+                              {occupant.type_occupant === "adulte" ? (
+                                <FicheInfoItem
+                                  label="Pièce d'identité"
+                                  value={occupant.piece_identite || "—"}
+                                />
+                              ) : null}
+                              {occupant.type_occupant === "enfant" ? (
+                                <FicheInfoItem
+                                  label="Âge"
+                                  value={
+                                    occupant.age_enfant != null
+                                      ? `${occupant.age_enfant} an${Number(occupant.age_enfant) > 1 ? "s" : ""}`
+                                      : "—"
+                                  }
+                                />
+                              ) : null}
+                              {occupant.type_occupant === "enfant" ? (
+                                <FicheInfoItem
+                                  label="Tranche d'âge"
+                                  value={occupant.tranche_age_nom || "—"}
+                                />
+                              ) : null}
+                              <FicheInfoItem
+                                label="Supplément"
+                                value={occupant.supplement_nom || "Aucun"}
+                              />
+                              <FicheInfoItem
+                                label="Prix de base"
+                                value={formatMoney(basePrice)}
+                              />
+                              {supplementPrice > 0 ? (
+                                <FicheInfoItem
+                                  label="Montant supplément"
+                                  value={formatMoney(supplementPrice)}
+                                />
+                              ) : null}
+                              <FicheInfoItem
+                                label="Prix total"
+                                value={formatMoney(totalPrice)}
+                              />
+                              {occupant.allergies_regime ? (
+                                <FicheInfoItem
+                                  label="Allergies / régime"
+                                  value={occupant.allergies_regime}
+                                />
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : null}
                 </section>
@@ -2364,8 +2586,22 @@ export function ReservationsManagement() {
                       value={viewReservation.promotion_nom || "Aucune"}
                     />
                     <FicheInfoItem
-                      label="Supplément"
-                      value={viewReservation.supplement_nom || "Aucun"}
+                      label="Suppléments"
+                      value={(() => {
+                        const occupants = viewReservation.occupants || [];
+                        const total = occupants.reduce((sum, occupant) => {
+                          const base = Number(occupant.prix_unitaire) || 0;
+                          const totalPrice = Number(occupant.prix_total) || 0;
+                          return sum + Math.max(0, totalPrice - base);
+                        }, 0);
+                        const count = occupants.filter((o) => o.supplement_nom).length;
+
+                        if (count === 0 && total <= 0) {
+                          return viewReservation.supplement_nom || "Aucun";
+                        }
+
+                        return `${count} occupant${count > 1 ? "s" : ""} · ${formatMoney(total)}`;
+                      })()}
                     />
                   </div>
                   <div className="rounded-2xl border border-[#ddd6fe] bg-[#f5f3ff] px-4 py-4 text-[13px] text-slate-700">

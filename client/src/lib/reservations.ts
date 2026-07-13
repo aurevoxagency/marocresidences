@@ -37,6 +37,8 @@ export type ReservationOccupant = {
   age_enfant: number | null;
   tranche_age_id: number | null;
   tranche_age_nom?: string | null;
+  supplement_id?: number | null;
+  supplement_nom?: string | null;
   date_naissance?: string | null;
   piece_identite?: string | null;
   allergies_regime?: string | null;
@@ -51,6 +53,7 @@ export type ReservationOccupantFormData = {
   prenom?: string | null;
   age_enfant?: number | null;
   tranche_age_id?: number | null;
+  supplement_id?: number | null;
   date_naissance?: string | null;
   piece_identite?: string | null;
   allergies_regime?: string | null;
@@ -358,6 +361,56 @@ export function calculateEnfantStayTotal(
   return calculateChambreStayTotal(tranche.prix, nights, promotion) ?? 0;
 }
 
+export function calculateOccupantSupplementStayTotal(
+  supplement: {
+    tarifs: Array<{
+      saison_id: number;
+      prix_adulte: number;
+      prix_bebe: number;
+      tarifs_enfant: Array<{ tranche_age_id: number; prix: number }>;
+    }>;
+  } | null | undefined,
+  saisonId: number | undefined,
+  type: ReservationOccupantType,
+  ageEnfant: number | null | undefined,
+  nbNuits: number,
+  tranchesAge: Array<{ id: number; age_min: number; age_max: number }>,
+  promotion?: { type_reduction: "pourcentage" | "valeur"; valeur_reduction: number } | null
+) {
+  if (!supplement || !saisonId) {
+    return 0;
+  }
+
+  const tarif = supplement.tarifs.find((item) => item.saison_id === saisonId);
+
+  if (!tarif) {
+    return 0;
+  }
+
+  const nights = Math.max(nbNuits, 1);
+
+  if (type === "adulte") {
+    return calculateChambreStayTotal(tarif.prix_adulte, nights, promotion) ?? 0;
+  }
+
+  if (type === "bebe") {
+    return calculateChambreStayTotal(tarif.prix_bebe, nights, promotion) ?? 0;
+  }
+
+  if (ageEnfant == null || ageEnfant < 0) {
+    return 0;
+  }
+
+  const tranche = tranchesAge.find(
+    (item) => ageEnfant >= item.age_min && ageEnfant <= item.age_max
+  );
+  const childTarif = tranche
+    ? tarif.tarifs_enfant.find((item) => item.tranche_age_id === tranche.id)
+    : null;
+
+  return calculateChambreStayTotal(childTarif?.prix, nights, promotion) ?? 0;
+}
+
 export function calculateSupplementStayTotal(
   supplement: {
     tarifs: Array<{
@@ -382,39 +435,42 @@ export function calculateSupplementStayTotal(
     return 0;
   }
 
-  const tarif = supplement.tarifs.find((item) => item.saison_id === saisonId);
+  const adultStay = calculateOccupantSupplementStayTotal(
+    supplement,
+    saisonId,
+    "adulte",
+    null,
+    params.nbNuits,
+    tranchesAge,
+    promotion
+  );
+  const bebeStay = calculateOccupantSupplementStayTotal(
+    supplement,
+    saisonId,
+    "bebe",
+    null,
+    params.nbNuits,
+    tranchesAge,
+    promotion
+  );
+  const enfantStay = calculateOccupantSupplementStayTotal(
+    supplement,
+    saisonId,
+    "enfant",
+    params.ageEnfant,
+    params.nbNuits,
+    tranchesAge,
+    promotion
+  );
 
-  if (!tarif) {
-    return 0;
-  }
-
-  const nights = Math.max(params.nbNuits, 1);
-  const nbAdultes = Math.max(1, params.nbAdultes);
-  const nbrsEnfants = Math.max(0, params.nbrsEnfants);
-  const nbrsBebe = Math.max(0, params.nbrsBebe);
-
-  let total = 0;
-
-  const adultStay = calculateChambreStayTotal(tarif.prix_adulte, nights, promotion) ?? 0;
-  total += adultStay * nbAdultes;
-
-  if (nbrsBebe > 0) {
-    const bebeStay = calculateChambreStayTotal(tarif.prix_bebe, nights, promotion) ?? 0;
-    total += bebeStay * nbrsBebe;
-  }
-
-  if (nbrsEnfants > 0 && params.ageEnfant != null && params.ageEnfant >= 0) {
-    const tranche = tranchesAge.find(
-      (item) => params.ageEnfant! >= item.age_min && params.ageEnfant! <= item.age_max
-    );
-    const childTarif = tranche
-      ? tarif.tarifs_enfant.find((item) => item.tranche_age_id === tranche.id)
-      : null;
-    const enfantStay = calculateChambreStayTotal(childTarif?.prix, nights, promotion) ?? 0;
-    total += enfantStay * nbrsEnfants;
-  }
-
-  return Math.round(total * 100) / 100;
+  return (
+    Math.round(
+      (adultStay * Math.max(1, params.nbAdultes) +
+        bebeStay * Math.max(0, params.nbrsBebe) +
+        enfantStay * Math.max(0, params.nbrsEnfants)) *
+        100
+    ) / 100
+  );
 }
 
 export async function fetchReservations(filters?: {

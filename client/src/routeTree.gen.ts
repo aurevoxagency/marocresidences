@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ReserverMaisonIdRouteImport } from './routes/reserver.$maisonId'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -28,35 +29,45 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReserverMaisonIdRoute = ReserverMaisonIdRouteImport.update({
+  id: '/reserver/$maisonId',
+  path: '/reserver/$maisonId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/reserver/$maisonId': typeof ReserverMaisonIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/reserver/$maisonId': typeof ReserverMaisonIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/reserver/$maisonId': typeof ReserverMaisonIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/reset-password'
+  fullPaths: '/' | '/dashboard' | '/reset-password' | '/reserver/$maisonId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/reset-password'
-  id: '__root__' | '/' | '/dashboard' | '/reset-password'
+  to: '/' | '/dashboard' | '/reset-password' | '/reserver/$maisonId'
+  id:
+    '__root__' | '/' | '/dashboard' | '/reset-password' | '/reserver/$maisonId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ReserverMaisonIdRoute: typeof ReserverMaisonIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +93,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reserver/$maisonId': {
+      id: '/reserver/$maisonId'
+      path: '/reserver/$maisonId'
+      fullPath: '/reserver/$maisonId'
+      preLoaderRoute: typeof ReserverMaisonIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +107,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ReserverMaisonIdRoute: ReserverMaisonIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -38,16 +38,19 @@ import {
 
 import { AccountSettings } from "@/components/account-settings";
 import { CategoriesChambreManagement } from "@/components/categories-chambre-management";
+import { CheckinsManagement } from "@/components/checkins-management";
 import { CommandesManagement } from "@/components/commandes-management";
 import { ClientsManagement } from "@/components/clients-management";
 import { DevisManagement } from "@/components/devis-management";
 import { DashboardOverview } from "@/components/dashboard-overview";
 import { FacturesManagement } from "@/components/factures-management";
 import { HebergementManagement } from "@/components/hebergement-management";
+import { JournalTransactionsManagement } from "@/components/journal-transactions-management";
 import { MaisonsManagement } from "@/components/maisons-management";
 import { PromotionsManagement } from "@/components/promotions-management";
 import { ProspectsManagement } from "@/components/prospects-management";
 import { ReservationsManagement } from "@/components/reservations-management";
+import { AvisClientsManagement } from "@/components/avis-clients-management";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -106,10 +109,7 @@ const PLACEHOLDER_VIEWS = new Set<DashboardView>([
   "gestion_commerciale",
   "gestion_financiere",
   "paiements",
-  "checkin_checkout",
-  "journal_transactions",
   "chiffre_affaires",
-  "avis_clients",
 ]);
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "maroc-dashboard-sidebar-width";
@@ -150,10 +150,24 @@ type SidebarNavItem = {
   label: string;
   icon: LucideIcon;
   indent?: boolean;
+  children?: SidebarNavItem[];
 };
 
-function findSidebarLabel(entries: SidebarNavItem[], view: DashboardView) {
-  return entries.find((item) => item.id === view);
+function findSidebarLabel(entries: SidebarNavItem[], view: DashboardView): SidebarNavItem | undefined {
+  for (const item of entries) {
+    if (item.id === view) {
+      return item;
+    }
+
+    if (item.children) {
+      const child = findSidebarLabel(item.children, view);
+      if (child) {
+        return child;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function SidebarItem({
@@ -162,6 +176,7 @@ function SidebarItem({
   active = false,
   compact = false,
   indent = false,
+  expanded,
   onClick,
 }: {
   icon: LucideIcon;
@@ -169,6 +184,7 @@ function SidebarItem({
   active?: boolean;
   compact?: boolean;
   indent?: boolean;
+  expanded?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -196,7 +212,19 @@ function SidebarItem({
       >
         <Icon className={indent && !compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
       </span>
-      {!compact ? <span className="leading-tight">{label}</span> : null}
+      {!compact ? (
+        <>
+          <span className="min-w-0 flex-1 leading-tight">{label}</span>
+          {expanded !== undefined ? (
+            <ChevronDown
+              className={[
+                "h-4 w-4 shrink-0 text-slate-400 transition-transform",
+                expanded ? "rotate-180" : "",
+              ].join(" ")}
+            />
+          ) : null}
+        </>
+      ) : null}
     </button>
   );
 }
@@ -240,6 +268,37 @@ function SidebarPanel({
   onNavigate: (view: DashboardView) => void;
   onLogout: () => void;
 }) {
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setOpenGroups((current) => {
+      const next = { ...current };
+      let changed = false;
+
+      for (const item of sidebarItems) {
+        if (!item.children?.length) {
+          continue;
+        }
+
+        const childActive = item.children.some((child) => child.id === activeView);
+
+        if (childActive && !next[item.id]) {
+          next[item.id] = true;
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [activeView, sidebarItems]);
+
+  const toggleGroup = (id: DashboardView) => {
+    setOpenGroups((current) => ({
+      ...current,
+      [id]: !current[id],
+    }));
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#fbfcff]">
       <div className={compact ? "shrink-0 p-2" : "shrink-0 p-4 pb-0 sm:p-5 sm:pb-0"}>
@@ -288,17 +347,58 @@ function SidebarPanel({
           compact ? "px-2" : "px-4 sm:px-5",
         ].join(" ")}
       >
-        {sidebarItems.map((item) => (
-          <SidebarItem
-            key={item.id}
-            icon={item.icon}
-            label={item.label}
-            active={activeView === item.id}
-            compact={compact}
-            indent={item.indent}
-            onClick={() => onNavigate(item.id)}
-          />
-        ))}
+        {sidebarItems.map((item) => {
+          const hasChildren = Boolean(item.children?.length);
+          const childActive = item.children?.some((child) => child.id === activeView) ?? false;
+          const isOpen = openGroups[item.id] ?? childActive;
+
+          if (!hasChildren) {
+            return (
+              <SidebarItem
+                key={item.id}
+                icon={item.icon}
+                label={item.label}
+                active={activeView === item.id}
+                compact={compact}
+                indent={item.indent}
+                onClick={() => onNavigate(item.id)}
+              />
+            );
+          }
+
+          return (
+            <div key={item.id} className="space-y-1">
+              <SidebarItem
+                icon={item.icon}
+                label={item.label}
+                active={childActive || activeView === item.id}
+                compact={compact}
+                expanded={!compact ? isOpen : undefined}
+                onClick={() => {
+                  if (compact) {
+                    onNavigate(item.children![0].id);
+                    return;
+                  }
+
+                  toggleGroup(item.id);
+                }}
+              />
+              {!compact && isOpen
+                ? item.children!.map((child) => (
+                    <SidebarItem
+                      key={child.id}
+                      icon={child.icon}
+                      label={child.label}
+                      active={activeView === child.id}
+                      compact={compact}
+                      indent
+                      onClick={() => onNavigate(child.id)}
+                    />
+                  ))
+                : null}
+            </div>
+          );
+        })}
       </nav>
 
       <div
@@ -377,10 +477,16 @@ function DashboardPage() {
         { id: "clients", label: "Clients", icon: Users },
         { id: "reservations", label: "Réservations", icon: CalendarDays },
         { id: "checkin_checkout", label: "Check-in / Check-out", icon: DoorOpen },
-        { id: "gestion_commerciale", label: "Gestion commerciale", icon: BriefcaseBusiness },
-        { id: "gestion_devis", label: "Devis", icon: FileText, indent: true },
-        { id: "gestion_commandes", label: "Commandes", icon: ShoppingBag, indent: true },
-        { id: "gestion_factures", label: "Factures", icon: FileSpreadsheet, indent: true },
+        {
+          id: "gestion_commerciale",
+          label: "Gestion commerciale",
+          icon: BriefcaseBusiness,
+          children: [
+            { id: "gestion_devis", label: "Devis", icon: FileText },
+            { id: "gestion_commandes", label: "Commandes", icon: ShoppingBag },
+            { id: "gestion_factures", label: "Factures", icon: FileSpreadsheet },
+          ],
+        },
         { id: "promotions", label: "Promotions", icon: BadgePercent },
         { id: "gestion_financiere", label: "Gestion financière", icon: Wallet },
         { id: "paiements", label: "Paiements", icon: CreditCard },
@@ -629,6 +735,18 @@ function DashboardPage() {
 
         {activeView === "reservations" && canManageGuestHouses ? (
           <ReservationsManagement />
+        ) : null}
+
+        {activeView === "avis_clients" && canManageGuestHouses ? (
+          <AvisClientsManagement />
+        ) : null}
+
+        {activeView === "checkin_checkout" && canManageGuestHouses ? (
+          <CheckinsManagement />
+        ) : null}
+
+        {activeView === "journal_transactions" && canManageGuestHouses ? (
+          <JournalTransactionsManagement />
         ) : null}
 
         {activeView === "promotions" && canManageGuestHouses ? (

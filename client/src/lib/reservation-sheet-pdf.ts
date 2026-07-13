@@ -349,6 +349,57 @@ function drawNotesBlock(doc: jsPDF, title: string, content: string, startY: numb
   return y + blockHeight + 8;
 }
 
+function drawOccupantCard(
+  doc: jsPDF,
+  title: string,
+  rows: Array<[string, string]>,
+  totalLabel: string,
+  startY: number
+) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const innerWidth = pageWidth - MARGIN * 2;
+  const gap = 6;
+  const columns = 2;
+  const colWidth = (innerWidth - gap * (columns - 1) - 12) / columns;
+  const rowHeight = 13;
+  const rowsPerColumn = Math.ceil(rows.length / columns);
+  const cardHeight = 12 + rowsPerColumn * rowHeight + 4;
+
+  let y = ensureSpace(doc, startY, cardHeight + 4);
+
+  setFill(doc, COLORS.white);
+  setDraw(doc, COLORS.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(MARGIN, y, innerWidth, cardHeight, 2.5, 2.5, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  setText(doc, COLORS.ink);
+  doc.text(title, MARGIN + 6, y + 7);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  setText(doc, COLORS.oliveDark);
+  doc.text(totalLabel, pageWidth - MARGIN - 6, y + 7, { align: "right" });
+
+  setDraw(doc, COLORS.border);
+  doc.setLineWidth(0.2);
+  doc.line(MARGIN + 4, y + 10, pageWidth - MARGIN - 4, y + 10);
+
+  const rowY = y + 14;
+
+  rows.forEach(([label, value], index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = MARGIN + 6 + column * (colWidth + gap);
+    const fieldY = rowY + row * rowHeight;
+
+    drawFieldRow(doc, label, value, x, fieldY, colWidth - 2);
+  });
+
+  return y + cardHeight + 6;
+}
+
 export async function downloadReservationSheetPdf(
   reservation: Reservation,
   maison: MaisonDetail | MaisonListItem | null
@@ -454,13 +505,80 @@ export async function downloadReservationSheetPdf(
     ["Adultes", String(reservation.nb_adultes)],
     ["Enfants", String(reservation.nbrs_enfants)],
     ["Bébés", String(reservation.nbrs_bebe)],
-    [
-      "Âge enfant",
-      reservation.nbrs_enfants > 0 && reservation.age_enfant
-        ? `${reservation.age_enfant} ans`
-        : "—",
-    ],
-  ], y, 4);
+  ], y, 3);
+
+  const occupants = reservation.occupants || [];
+
+  if (occupants.length > 0) {
+    occupants.forEach((occupant, index) => {
+      const typeLabel =
+        occupant.type_occupant === "adulte"
+          ? "Adulte"
+          : occupant.type_occupant === "enfant"
+            ? "Enfant"
+            : "Bébé";
+      const typeIndex =
+        occupants
+          .slice(0, index + 1)
+          .filter((item) => item.type_occupant === occupant.type_occupant).length;
+      const fullName =
+        [occupant.prenom, occupant.nom].filter(Boolean).join(" ") || "—";
+      const basePrice = Number(occupant.prix_unitaire) || 0;
+      const totalPrice = Number(occupant.prix_total) || 0;
+      const supplementPrice = Math.max(0, totalPrice - basePrice);
+
+      const rows: Array<[string, string]> = [
+        ["Prénom", occupant.prenom || "—"],
+        ["Nom", occupant.nom || "—"],
+        [
+          "Date de naissance",
+          occupant.date_naissance ? formatDateDisplay(occupant.date_naissance) : "—",
+        ],
+      ];
+
+      if (occupant.type_occupant === "adulte") {
+        rows.push(["Pièce d'identité", occupant.piece_identite || "—"]);
+      }
+
+      if (occupant.type_occupant === "enfant") {
+        rows.push([
+          "Âge",
+          occupant.age_enfant != null
+            ? `${occupant.age_enfant} an${Number(occupant.age_enfant) > 1 ? "s" : ""}`
+            : "—",
+        ]);
+        rows.push(["Tranche d'âge", occupant.tranche_age_nom || "—"]);
+      }
+
+      rows.push(["Supplément", occupant.supplement_nom || "Aucun"]);
+      rows.push(["Prix de base", formatMoney(basePrice)]);
+
+      if (supplementPrice > 0) {
+        rows.push(["Montant supplément", formatMoney(supplementPrice)]);
+      }
+
+      rows.push(["Prix total", formatMoney(totalPrice)]);
+
+      if (occupant.allergies_regime) {
+        rows.push(["Allergies / régime", occupant.allergies_regime]);
+      }
+
+      y = drawOccupantCard(
+        doc,
+        `${typeLabel} ${typeIndex} · ${fullName}`,
+        rows,
+        formatMoney(totalPrice),
+        y
+      );
+    });
+  }
+
+  const occupantsSupplementTotal = occupants.reduce((sum, occupant) => {
+    const base = Number(occupant.prix_unitaire) || 0;
+    const total = Number(occupant.prix_total) || 0;
+    return sum + Math.max(0, total - base);
+  }, 0);
+  const occupantsWithSupplement = occupants.filter((o) => o.supplement_nom).length;
 
   y = drawSectionHeader(doc, "Tarification", y);
   y = drawPricingTable(
@@ -501,9 +619,19 @@ export async function downloadReservationSheetPdf(
         ),
       },
       {
-        label: reservation.supplement_nom ? `Supplément · ${reservation.supplement_nom}` : "Supplément",
-        amount: reservation.supplement_nom ? "Inclus" : "Aucun",
-        muted: !reservation.supplement_nom,
+        label:
+          occupantsWithSupplement > 0
+            ? `Suppléments · ${occupantsWithSupplement} occupant${occupantsWithSupplement > 1 ? "s" : ""}`
+            : reservation.supplement_nom
+              ? `Supplément · ${reservation.supplement_nom}`
+              : "Suppléments",
+        amount:
+          occupantsSupplementTotal > 0
+            ? formatMoney(occupantsSupplementTotal)
+            : reservation.supplement_nom
+              ? "Inclus"
+              : "Aucun",
+        muted: occupantsSupplementTotal <= 0 && !reservation.supplement_nom,
       },
     ],
     [
