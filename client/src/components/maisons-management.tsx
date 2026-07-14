@@ -84,7 +84,8 @@ type FormState = {
   description: string;
   categorie: string;
   nb_chambres: string;
-  capacite_max: string;
+  lits_bebe_disponibles: boolean;
+  nb_lits_bebe: string;
   adresse: string;
   quartier: string;
   ville: string;
@@ -126,7 +127,8 @@ function emptyForm(): FormState {
     description: "",
     categorie: "",
     nb_chambres: "0",
-    capacite_max: "0",
+    lits_bebe_disponibles: false,
+    nb_lits_bebe: "0",
     adresse: "",
     quartier: "",
     ville: "",
@@ -218,7 +220,8 @@ function toFormState(maison: Awaited<ReturnType<typeof fetchMaison>>): FormState
     description: maison.description || "",
     categorie: maison.categorie || "",
     nb_chambres: String(maison.nb_chambres ?? 0),
-    capacite_max: String(maison.capacite_max ?? 0),
+    lits_bebe_disponibles: Boolean(maison.lits_bebe_disponibles),
+    nb_lits_bebe: String(maison.nb_lits_bebe ?? 0),
     adresse: maison.adresse || "",
     quartier: maison.quartier || "",
     ville: maison.ville || "",
@@ -269,7 +272,10 @@ function toPayload(form: FormState): MaisonFormData {
     description: form.description.trim() || undefined,
     categorie: form.categorie.trim() || undefined,
     nb_chambres: Number(form.nb_chambres) || 0,
-    capacite_max: Number(form.capacite_max) || 0,
+    lits_bebe_disponibles: form.lits_bebe_disponibles,
+    nb_lits_bebe: form.lits_bebe_disponibles
+      ? Math.max(0, Number(form.nb_lits_bebe) || 0)
+      : 0,
     adresse: form.adresse.trim() || undefined,
     quartier: form.quartier.trim() || undefined,
     ville: form.ville.trim() || undefined,
@@ -648,7 +654,6 @@ export function MaisonsManagement() {
                 <TableHead className="text-[12px] font-semibold text-slate-400">Nom</TableHead>
                 <TableHead className="text-[12px] font-semibold text-slate-400">Ville</TableHead>
                 <TableHead className="text-[12px] font-semibold text-slate-400">Chambres</TableHead>
-                <TableHead className="text-[12px] font-semibold text-slate-400">Capacité</TableHead>
                 <TableHead className="text-[12px] font-semibold text-slate-400">Statut</TableHead>
                 <TableHead className="text-right text-[12px] font-semibold text-slate-400">
                   Actions
@@ -683,9 +688,6 @@ export function MaisonsManagement() {
                   </TableCell>
                   <TableCell className="text-[13px] text-slate-500">
                     {maison.nb_chambres}
-                  </TableCell>
-                  <TableCell className="text-[13px] text-slate-500">
-                    {maison.capacite_max}
                   </TableCell>
                   <TableCell>
                     <span
@@ -815,17 +817,46 @@ export function MaisonsManagement() {
                       }
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="maison-capacite">Capacité max</Label>
-                    <Input
-                      id="maison-capacite"
-                      type="number"
-                      min="0"
-                      value={form.capacite_max}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, capacite_max: e.target.value }))
-                      }
-                    />
+                  <div className="space-y-3 sm:col-span-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="maison-lits-bebe"
+                        checked={form.lits_bebe_disponibles}
+                        onCheckedChange={(checked) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            lits_bebe_disponibles: checked === true,
+                            nb_lits_bebe:
+                              checked === true
+                                ? prev.nb_lits_bebe === "0"
+                                  ? "1"
+                                  : prev.nb_lits_bebe
+                                : "0",
+                          }))
+                        }
+                      />
+                      <Label htmlFor="maison-lits-bebe" className="cursor-pointer font-medium">
+                        Lits bébé disponibles
+                      </Label>
+                    </div>
+                    {form.lits_bebe_disponibles ? (
+                      <div className="space-y-2 pl-6">
+                        <Label htmlFor="maison-nb-lits-bebe">Nombre de lits bébé</Label>
+                        <Input
+                          id="maison-nb-lits-bebe"
+                          type="number"
+                          min="1"
+                          className="max-w-xs"
+                          value={form.nb_lits_bebe}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              nb_lits_bebe: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="maison-checkin">Heure check-in</Label>
@@ -1373,7 +1404,16 @@ export function MaisonsManagement() {
                   value={[viewMaison.code_postal, viewMaison.pays].filter(Boolean).join(" · ")}
                 />
                 <InfoItem label="Chambres" value={viewMaison.nb_chambres} />
-                <InfoItem label="Capacité max" value={viewMaison.capacite_max} />
+                <InfoItem
+                  label="Lits bébé"
+                  value={
+                    viewMaison.lits_bebe_disponibles
+                      ? `${viewMaison.nb_lits_bebe} disponible${
+                          Number(viewMaison.nb_lits_bebe) > 1 ? "s" : ""
+                        }`
+                      : "Non"
+                  }
+                />
                 <InfoItem
                   label="Check-in"
                   value={formatTimeDisplay(viewMaison.heure_checkin)}

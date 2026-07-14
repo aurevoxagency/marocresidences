@@ -159,13 +159,13 @@ async function getDashboardStats(req, res) {
         SELECT
           COUNT(*) AS total,
           SUM(statut = 'actif') AS actives,
-          COALESCE(SUM(nb_chambres), 0) AS chambres,
-          COALESCE(SUM(capacite_max), 0) AS capacite
+          COALESCE(SUM(nb_chambres), 0) AS chambres
         FROM maisons_hotes
       `),
       pool.query(`
         SELECT
           (SELECT COUNT(*) FROM chambres WHERE statut = 'actif') AS chambres_actives,
+          (SELECT COALESCE(SUM(capacite_max * allotement), 0) FROM chambres WHERE statut = 'actif') AS capacite,
           (SELECT COUNT(*) FROM saisons) AS saisons,
           (SELECT COUNT(*) FROM supplements WHERE statut = 'actif') AS supplements_actifs,
           (SELECT COUNT(*) FROM tranches_age) AS tranches_age
@@ -348,7 +348,7 @@ async function getDashboardStats(req, res) {
         maisons: Number(maisonSummary[0]?.total) || 0,
         maisons_actives: Number(maisonSummary[0]?.actives) || 0,
         chambres: Number(maisonSummary[0]?.chambres) || 0,
-        capacite_totale: Number(maisonSummary[0]?.capacite) || 0,
+        capacite_totale: Number(hebergementSummary[0]?.capacite) || 0,
         chambres_actives: Number(hebergementSummary[0]?.chambres_actives) || 0,
         saisons: Number(hebergementSummary[0]?.saisons) || 0,
         supplements_actifs: Number(hebergementSummary[0]?.supplements_actifs) || 0,

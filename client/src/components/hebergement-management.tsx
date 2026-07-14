@@ -109,16 +109,48 @@ function emptySaisonForm(): SaisonFormState {
   return { nom: "", date_debut: "", date_fin: "", couleur: "#3b82f6" };
 }
 
+function capaciteFromTypeNom(nom?: string | null): number | null {
+  if (!nom) {
+    return null;
+  }
+
+  const normalized = nom
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  if (/\bsingle\b|\bsimple\b/.test(normalized)) return 1;
+  if (/\bdouble\b|\btwin\b/.test(normalized)) return 2;
+  if (/\btriple\b/.test(normalized)) return 3;
+  if (/\bquadruple\b/.test(normalized)) return 4;
+  if (/\bquintuple\b/.test(normalized)) return 5;
+
+  return null;
+}
+
+function capaciteForTypeId(
+  typeId: string,
+  types: HebergementReferences["types_chambre"] | undefined
+): number | null {
+  const type = types?.find((item) => String(item.id) === String(typeId));
+  return capaciteFromTypeNom(type?.nom);
+}
+
 function emptyChambreForm(
   references: HebergementReferences | null,
   saisons: Saison[]
 ): ChambreFormState {
+  const defaultTypeId = references?.types_chambre[0]?.id?.toString() || "";
+  const defaultCapacite =
+    capaciteForTypeId(defaultTypeId, references?.types_chambre) ?? 2;
+
   return {
     nom: "",
     categorie_id: references?.categories_chambre[0]?.id?.toString() || "",
-    type_id: references?.types_chambre[0]?.id?.toString() || "",
+    type_id: defaultTypeId,
     allotement: "1",
-    capacite_max: "2",
+    capacite_max: String(defaultCapacite),
     marge_type: "pourcentage",
     marge_valeur: "0",
     statut: "actif",
@@ -140,12 +172,14 @@ function TarifsEditor<T extends TarifChambre>({
   tarifs,
   onChange,
   showPrixBebe = false,
+  disableEnfantPrices = false,
 }: {
   saisons: Saison[];
   tranches: HebergementReferences["tranches_age"];
   tarifs: T[];
   onChange: (tarifs: T[]) => void;
   showPrixBebe?: boolean;
+  disableEnfantPrices?: boolean;
 }) {
   if (saisons.length === 0) {
     return (
@@ -223,6 +257,7 @@ function TarifsEditor<T extends TarifChambre>({
                   (row) => row.tranche_age_id === tranche.id
                 );
                 const child = tarif.tarifs_enfant[childIndex];
+                const locked = disableEnfantPrices;
 
                 if (!child) return null;
 
@@ -233,8 +268,20 @@ function TarifsEditor<T extends TarifChambre>({
                       type="number"
                       min="0"
                       step="0.01"
-                      value={child.prix}
+                      value={locked ? 0 : child.prix}
+                      disabled={locked}
+                      readOnly={locked}
+                      className={locked ? "cursor-not-allowed bg-slate-50 text-slate-400" : undefined}
+                      title={
+                        locked
+                          ? "Indisponible : capacité max = 1 (pas de tarif enfant)"
+                          : undefined
+                      }
                       onChange={(e) => {
+                        if (locked) {
+                          return;
+                        }
+
                         const next = [...tarifs];
                         const nextChildren = [...tarif.tarifs_enfant];
                         nextChildren[childIndex] = {
@@ -1187,9 +1234,33 @@ export function HebergementManagement({
                 <Label>Type</Label>
                 <Select
                   value={chambreForm.type_id}
-                  onValueChange={(value) =>
-                    setChambreForm((current) => ({ ...current, type_id: value }))
-                  }
+                  onValueChange={(value) => {
+                    const capacite = capaciteForTypeId(
+                      value,
+                      references?.types_chambre
+                    );
+
+                    setChambreForm((current) => {
+                      const nextCapacite =
+                        capacite != null ? String(capacite) : current.capacite_max;
+                      const lockEnfant = Number(nextCapacite) <= 1;
+
+                      return {
+                        ...current,
+                        type_id: value,
+                        capacite_max: nextCapacite,
+                        tarifs: lockEnfant
+                          ? current.tarifs.map((tarif) => ({
+                              ...tarif,
+                              tarifs_enfant: tarif.tarifs_enfant.map((row) => ({
+                                ...row,
+                                prix: 0,
+                              })),
+                            }))
+                          : current.tarifs,
+                      };
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1220,10 +1291,30 @@ export function HebergementManagement({
                   type="number"
                   min="1"
                   value={chambreForm.capacite_max}
-                  onChange={(e) =>
-                    setChambreForm((current) => ({ ...current, capacite_max: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    const nextCapacite = e.target.value;
+                    setChambreForm((current) => {
+                      const lockEnfant = Number(nextCapacite) <= 1;
+
+                      return {
+                        ...current,
+                        capacite_max: nextCapacite,
+                        tarifs: lockEnfant
+                          ? current.tarifs.map((tarif) => ({
+                              ...tarif,
+                              tarifs_enfant: tarif.tarifs_enfant.map((row) => ({
+                                ...row,
+                                prix: 0,
+                              })),
+                            }))
+                          : current.tarifs,
+                      };
+                    });
+                  }}
                 />
+                <p className="text-[11px] text-slate-500">
+                  Préremplie selon le type (Single → 1, Double → 2…), modifiable.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>Type de marge</Label>
@@ -1281,6 +1372,7 @@ export function HebergementManagement({
                   tranches={references.tranches_age}
                   tarifs={chambreForm.tarifs}
                   onChange={(tarifs) => setChambreForm((current) => ({ ...current, tarifs }))}
+                  disableEnfantPrices={Number(chambreForm.capacite_max) <= 1}
                 />
               ) : null}
             </div>

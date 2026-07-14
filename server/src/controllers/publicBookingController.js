@@ -18,8 +18,23 @@ function toIsoDate(value) {
     return null;
   }
 
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
   const text = String(value).slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function todayIsoLocal() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function findSaisonId(saisons, dateArrivee) {
@@ -239,7 +254,8 @@ async function getBookingContext(req, res) {
           m.description,
           m.categorie,
           m.nb_chambres,
-          m.capacite_max,
+          m.lits_bebe_disponibles,
+          m.nb_lits_bebe,
           m.adresse,
           m.quartier,
           m.ville,
@@ -338,7 +354,14 @@ async function getBookingContext(req, res) {
     }
 
     return res.status(200).json({
-      maison: maisonRows[0],
+      maison: {
+        ...maisonRows[0],
+        lits_bebe_disponibles: Boolean(
+          maisonRows[0].lits_bebe_disponibles === true ||
+            maisonRows[0].lits_bebe_disponibles === 1
+        ),
+        nb_lits_bebe: Number(maisonRows[0].nb_lits_bebe) || 0,
+      },
       saisons,
       saison_id: saisonId,
       tranches_age: tranchesAge,
@@ -351,6 +374,160 @@ async function getBookingContext(req, res) {
   }
 }
 
+async function validatePromoCode(req, res) {
+  try {
+    const code = String(req.body?.code || "")
+      .trim()
+      .toUpperCase();
+    const maisonId = toIntOrDefault(req.body?.maison_id, 0);
+    const chambreId = toIntOrDefault(req.body?.chambre_id, 0);
+    const dateArrivee = toIsoDate(req.body?.date_arrivee);
+    const dateDepart = toIsoDate(req.body?.date_depart);
+
+    if (!code) {
+      return res.status(400).json({ message: "Veuillez saisir un code promo." });
+    }
+
+    if (maisonId <= 0) {
+      return res.status(400).json({ message: "Maison invalide." });
+    }
+
+    const [rows] = await pool.query(
+      `
+        SELECT
+          id,
+          nom,
+          code_promo,
+          description,
+          type_reduction,
+          valeur_reduction,
+          type_condition,
+          jours_avant_min,
+          jours_avant_max,
+          duree_sejour_min,
+          applicable_a,
+          categorie_id,
+          chambre_id,
+          maison_id,
+          DATE_FORMAT(date_debut_validite, '%Y-%m-%d') AS date_debut_validite,
+          DATE_FORMAT(date_fin_validite, '%Y-%m-%d') AS date_fin_validite,
+          DATE_FORMAT(date_debut_sejour, '%Y-%m-%d') AS date_debut_sejour,
+          DATE_FORMAT(date_fin_sejour, '%Y-%m-%d') AS date_fin_sejour,
+          utilisation_max,
+          utilisation_actuelle,
+          statut
+        FROM promotions
+        WHERE UPPER(TRIM(code_promo)) = ?
+          AND statut = 'active'
+          AND CURDATE() BETWEEN DATE(date_debut_validite) AND DATE(date_fin_validite)
+        LIMIT 1
+      `,
+      [code]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Code promo incorrect" });
+    }
+
+    const promotion = rows[0];
+    const today = todayIsoLocal();
+
+    if (
+      promotion.maison_id != null &&
+      Number(promotion.maison_id) !== Number(maisonId)
+    ) {
+      return res.status(400).json({ message: "Code promo incorrect" });
+    }
+
+    if (
+      promotion.utilisation_max != null &&
+      Number(promotion.utilisation_actuelle) >= Number(promotion.utilisation_max)
+    ) {
+      return res.status(400).json({ message: "Code promo incorrect" });
+    }
+
+    if (dateArrivee && dateDepart) {
+      const nights = Math.round(
+        (new Date(`${dateDepart}T00:00:00`).getTime() -
+          new Date(`${dateArrivee}T00:00:00`).getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
+
+      if (
+        promotion.duree_sejour_min != null &&
+        nights < Number(promotion.duree_sejour_min)
+      ) {
+        return res.status(400).json({ message: "Code promo incorrect" });
+      }
+
+      if (promotion.date_debut_sejour && promotion.date_fin_sejour) {
+        const stayStart = toIsoDate(promotion.date_debut_sejour);
+        const stayEnd = toIsoDate(promotion.date_fin_sejour);
+
+        if (!stayStart || !stayEnd || dateArrivee < stayStart || dateArrivee > stayEnd) {
+          return res.status(400).json({ message: "Code promo incorrect" });
+        }
+      }
+
+      if (
+        promotion.type_condition === "early_booking" ||
+        promotion.type_condition === "last_minute"
+      ) {
+        const daysBefore = Math.round(
+          (new Date(`${dateArrivee}T00:00:00`).getTime() -
+            new Date(`${today}T00:00:00`).getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+
+        if (
+          promotion.jours_avant_min != null &&
+          daysBefore < Number(promotion.jours_avant_min)
+        ) {
+          return res.status(400).json({ message: "Code promo incorrect" });
+        }
+
+        if (
+          promotion.jours_avant_max != null &&
+          daysBefore > Number(promotion.jours_avant_max)
+        ) {
+          return res.status(400).json({ message: "Code promo incorrect" });
+        }
+      }
+    }
+
+    if (chambreId > 0 && promotion.applicable_a !== "toutes_chambres") {
+      const [chambres] = await pool.query(
+        `
+          SELECT id, maison_id, categorie_id
+          FROM chambres
+          WHERE id = ? AND maison_id = ? AND statut = 'actif'
+          LIMIT 1
+        `,
+        [chambreId, maisonId]
+      );
+
+      if (chambres.length === 0 || !promotionAppliesToChambre(promotion, chambres[0])) {
+        return res.status(400).json({ message: "Code promo incorrect" });
+      }
+    }
+
+    return res.status(200).json({
+      promotion: {
+        id: promotion.id,
+        nom: promotion.nom,
+        code_promo: promotion.code_promo,
+        description: promotion.description,
+        type_reduction: promotion.type_reduction,
+        valeur_reduction: Number(promotion.valeur_reduction),
+      },
+    });
+  } catch (error) {
+    console.error("Error validating promo code:", error);
+    return res.status(500).json({ message: "Impossible de vérifier le code promo." });
+  }
+}
+
 module.exports = {
   getBookingContext,
+  validatePromoCode,
 };

@@ -505,7 +505,11 @@ export async function downloadReservationSheetPdf(
     ["Adultes", String(reservation.nb_adultes)],
     ["Enfants", String(reservation.nbrs_enfants)],
     ["Bébés", String(reservation.nbrs_bebe)],
-  ], y, 3);
+    [
+      "Lit bébé",
+      reservation.lit_bebe === true || reservation.lit_bebe === 1 ? "Demandé" : "Non",
+    ],
+  ], y, 4);
 
   const occupants = reservation.occupants || [];
 
@@ -588,37 +592,6 @@ export async function downloadReservationSheetPdf(
       { label: "Prix bébé", amount: formatMoney(reservation.prix_bebe_total) },
       { label: "Prix enfants", amount: formatMoney(reservation.prix_enfants_total) },
       {
-        label: reservation.promotion_nom
-          ? `Promotion · ${reservation.promotion_nom}`
-          : reservation.type_reduction && Number(reservation.valeur_reduction) > 0
-            ? `Réduction · ${
-                reservation.type_reduction === "%"
-                  ? `${reservation.valeur_reduction} %`
-                  : formatMoney(reservation.valeur_reduction)
-              }`
-            : "Réduction",
-        amount:
-          reservation.type_reduction && Number(reservation.valeur_reduction) > 0
-            ? formatMoney(
-                -Math.abs(
-                  computeMontantReduction(
-                    Number(reservation.prix_chambre_total) +
-                      Number(reservation.prix_bebe_total) +
-                      Number(reservation.prix_enfants_total),
-                    reservation.type_reduction,
-                    Number(reservation.valeur_reduction)
-                  )
-                )
-              )
-            : reservation.promotion_nom
-              ? "Appliquée"
-              : "Aucune",
-        muted: !(
-          reservation.promotion_nom ||
-          (reservation.type_reduction && Number(reservation.valeur_reduction) > 0)
-        ),
-      },
-      {
         label:
           occupantsWithSupplement > 0
             ? `Suppléments · ${occupantsWithSupplement} occupant${occupantsWithSupplement > 1 ? "s" : ""}`
@@ -639,6 +612,31 @@ export async function downloadReservationSheetPdf(
       {
         label: `TVA (${Number(reservation.taux_tva_applique) || 0} %)`,
         amount: formatMoney(reservation.montant_tva),
+      },
+      {
+        label: reservation.code_promo
+          ? `Réduction · ${reservation.code_promo}`
+          : reservation.promotion_nom
+            ? `Réduction · ${reservation.promotion_nom}`
+            : reservation.type_reduction && Number(reservation.valeur_reduction) > 0
+              ? `Réduction · ${
+                  reservation.type_reduction === "%"
+                    ? `${reservation.valeur_reduction} %`
+                    : formatMoney(reservation.valeur_reduction)
+                }`
+              : "Réduction",
+        amount:
+          reservation.type_reduction && Number(reservation.valeur_reduction) > 0
+            ? formatMoney(
+                -Math.abs(
+                  computeMontantReduction(
+                    Number(reservation.prix_total_ht) + Number(reservation.montant_tva),
+                    reservation.type_reduction,
+                    Number(reservation.valeur_reduction)
+                  )
+                )
+              )
+            : "Aucune",
       },
       { label: "Total TTC", amount: formatMoney(reservation.prix_total_ttc), highlight: true },
       { label: "Montant payé", amount: formatMoney(reservation.montant_paye) },

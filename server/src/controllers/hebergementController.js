@@ -132,11 +132,6 @@ async function syncMaisonChambreCounts(connection, maisonId) {
           SELECT COALESCE(SUM(c.allotement), 0)
           FROM chambres c
           WHERE c.maison_id = m.id AND c.statut = 'actif'
-        ),
-        capacite_max = (
-          SELECT COALESCE(SUM(c.capacite_max * c.allotement), 0)
-          FROM chambres c
-          WHERE c.maison_id = m.id AND c.statut = 'actif'
         )
       WHERE m.id = ?
     `,

@@ -14,7 +14,8 @@ export type PublicBookingMaison = {
   description: string | null;
   categorie: string | null;
   nb_chambres: number;
-  capacite_max: number;
+  lits_bebe_disponibles: boolean;
+  nb_lits_bebe: number;
   adresse: string | null;
   quartier: string | null;
   ville: string | null;
@@ -72,8 +73,10 @@ export type PublicReservationPayload = {
   nb_adultes: number;
   nbrs_enfants: number;
   nbrs_bebe: number;
+  lit_bebe?: boolean | number;
   age_enfant?: number;
   promotion_id?: number | null;
+  code_promo?: string | null;
   type_reduction?: ReservationTypeReduction | null;
   valeur_reduction?: number;
   prix_chambre_total: number;
@@ -114,6 +117,33 @@ export async function fetchPublicBookingContext(
   );
 
   return parseResponse<PublicBookingContext>(response);
+}
+
+export type PublicPromoCode = {
+  id: number;
+  nom: string;
+  code_promo: string | null;
+  description: string | null;
+  type_reduction: "pourcentage" | "valeur";
+  valeur_reduction: number;
+};
+
+export async function validatePublicPromoCode(payload: {
+  code: string;
+  maison_id: number;
+  chambre_id?: number;
+  date_arrivee?: string;
+  date_depart?: string;
+}) {
+  const response = await fetch(`${getApiBaseUrl()}/public/promotions/validate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseResponse<{ promotion: PublicPromoCode }>(response);
 }
 
 export async function createPublicReservation(payload: PublicReservationPayload) {

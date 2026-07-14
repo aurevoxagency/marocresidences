@@ -57,6 +57,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { HomeFloatingWidgets } from "@/components/home-floating-widgets";
 import { AuthDialog } from "@/components/auth-dialog";
 import { CurrencyProvider, useCurrency } from "@/components/currency-provider";
@@ -249,6 +257,10 @@ function formatVoyageursLabel(
 
 function totalGuests(voyageurs: VoyageursState) {
   return voyageurs.adults + voyageurs.childrenAges.length + voyageurs.babiesAges.length;
+}
+
+function roomTypeCapacity(adults: number) {
+  return Math.max(1, Math.floor(adults) || 1);
 }
 
 const advantageIcons = [ShieldCheck, BadgeCheck, Headphones] as const;
@@ -736,12 +748,26 @@ function SearchBar({
               defaultMonth={dateRange?.from || new Date()}
               disabled={{ before: new Date() }}
               onSelect={(range) => {
-                setDateArrivee(toIsoDate(range?.from));
-                setDateDepart(toIsoDate(range?.to));
-
-                if (range?.from && range?.to) {
-                  setDatesOpen(false);
+                if (!range?.from) {
+                  setDateArrivee("");
+                  setDateDepart("");
+                  return;
                 }
+
+                const fromIso = toIsoDate(range.from);
+                const toIso = toIsoDate(range.to);
+                // react-day-picker sets from === to on the first click; keep only arrival then.
+                const sameDay = Boolean(fromIso && toIso && fromIso === toIso);
+
+                if (!toIso || sameDay) {
+                  setDateArrivee(fromIso);
+                  setDateDepart("");
+                  return;
+                }
+
+                setDateArrivee(fromIso);
+                setDateDepart(toIso);
+                setDatesOpen(false);
               }}
               initialFocus
             />
@@ -1110,12 +1136,18 @@ function SearchResults({
 }) {
   const { currency } = useCurrency();
   const { language, t } = useLanguage();
+  const [detailsMaison, setDetailsMaison] = useState<MaisonListItem | null>(null);
 
   if (!criteria) {
     return null;
   }
 
   const guests = totalGuests(criteria.voyageurs);
+  const roomCapacity =
+    Number(criteria.voyageurs.adults) > 0
+      ? roomTypeCapacity(criteria.voyageurs.adults)
+      : 2;
+  const roomTypeLabel = t.results.roomType(roomCapacity);
   const childAges =
     criteria.voyageurs.childrenAges.length > 0
       ? ` · ${t.results.childAges}: ${criteria.voyageurs.childrenAges.join(", ")}`
@@ -1179,7 +1211,7 @@ function SearchResults({
           </div>
         ) : (
           <div className="mt-12 grid grid-cols-1 gap-8">
-            {results.map((maison, index) => {
+            {results.map((maison) => {
               const photo = resolvePhotoUrl(maison.photo_principale) || house1;
               const location =
                 [maison.quartier, maison.ville, maison.pays].filter(Boolean).join(" · ") ||
@@ -1190,8 +1222,6 @@ function SearchResults({
                 ...(maison.services || []),
                 ...(maison.equipements || []),
               ].slice(0, 5);
-              const fitsGuests =
-                !maison.capacite_max || maison.capacite_max >= guests;
 
               return (
                 <article
@@ -1207,32 +1237,13 @@ function SearchResults({
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-black/10" />
 
-                      <div className="absolute left-5 top-5 flex flex-wrap gap-2">
-                        {maison.categorie ? (
-                          <span className="rounded-full bg-white/92 px-3 py-1 text-[11px] font-semibold text-slate-800 backdrop-blur">
-                            {maison.categorie}
-                          </span>
-                        ) : null}
-                        <span
-                          className="rounded-full px-3 py-1 text-[11px] font-semibold text-white backdrop-blur"
-                          style={{ background: "color-mix(in oklab, var(--olive-deep) 82%, transparent)" }}
-                        >
-                          {t.results.selection(index + 1)}
-                        </span>
-                        {fitsGuests ? (
-                          <span className="rounded-full bg-emerald-500/90 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
-                            {t.results.capacityOk}
-                          </span>
-                        ) : null}
-                      </div>
-
                       <div className="absolute inset-x-5 bottom-5 text-white">
                         <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/80">
                           <MapPin className="h-3.5 w-3.5" />
                           {location}
                         </p>
                         <div className="mt-2 flex items-end justify-between gap-4">
-                          <h3 className="max-w-[80%] text-3xl font-semibold leading-tight">
+                          <h3 className="max-w-[90%] text-3xl font-semibold leading-tight">
                             {maison.nom}
                           </h3>
                           {hasRating ? (
@@ -1243,11 +1254,7 @@ function SearchResults({
                               />
                               {rating.toFixed(1)}
                             </div>
-                          ) : (
-                            <div className="rounded-full bg-black/40 px-3 py-1.5 text-xs backdrop-blur">
-                              {t.results.new}
-                            </div>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1266,20 +1273,12 @@ function SearchResults({
                           </p>
                         ) : null}
 
-                        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
                           <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
                               <BedDouble className="h-3.5 w-3.5" /> {t.results.rooms}
                             </div>
                             <p className="mt-1.5 text-xl font-semibold">{maison.nb_chambres || "—"}</p>
-                          </div>
-                          <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
-                            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                              <Users className="h-3.5 w-3.5" /> {t.results.capacity}
-                            </div>
-                            <p className="mt-1.5 text-xl font-semibold">
-                              {maison.capacite_max || "—"}
-                            </p>
                           </div>
                           <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
@@ -1343,7 +1342,7 @@ function SearchResults({
                       <div className="mt-7 flex flex-col gap-4 border-t border-black/5 pt-5 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            {t.results.pricingFrom}
+                            {t.results.pricingFrom} · {roomTypeLabel}
                           </p>
                           <p className="mt-0.5 text-2xl font-semibold" style={{ color: "var(--ink)" }}>
                             {maison.prix_adulte_min != null &&
@@ -1355,13 +1354,14 @@ function SearchResults({
                                 )
                               : currencyLabel(currency)}
                             <span className="ml-2 text-sm font-normal text-muted-foreground">
-                              {t.results.perNightAdult}
+                              {t.results.perNightRoom(roomTypeLabel)}
                             </span>
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
+                            onClick={() => setDetailsMaison(maison)}
                             className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:bg-[#f7f2ea]"
                           >
                             {t.results.details}
@@ -1384,6 +1384,186 @@ function SearchResults({
           </div>
         )}
       </div>
+
+      <Dialog
+        open={Boolean(detailsMaison)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailsMaison(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl">
+          {detailsMaison ? (
+            <>
+              <div className="relative h-48 w-full overflow-hidden sm:h-56">
+                <img
+                  src={resolvePhotoUrl(detailsMaison.photo_principale) || house1}
+                  alt={detailsMaison.nom}
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+                  <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/80">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {[detailsMaison.quartier, detailsMaison.ville, detailsMaison.pays]
+                      .filter(Boolean)
+                      .join(" · ") || "Maroc"}
+                  </p>
+                  <DialogHeader className="mt-1 space-y-0 p-0 text-left">
+                    <DialogTitle className="text-2xl text-white sm:text-3xl">
+                      {detailsMaison.nom}
+                    </DialogTitle>
+                    <DialogDescription className="sr-only">
+                      Détails de {detailsMaison.nom}
+                    </DialogDescription>
+                  </DialogHeader>
+                </div>
+              </div>
+
+              <div className="space-y-5 p-5 sm:p-6">
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {detailsMaison.description?.trim() || t.results.defaultDescription}
+                </p>
+
+                {detailsMaison.adresse ? (
+                  <p className="text-sm text-foreground/70">
+                    <span className="font-medium text-foreground">Adresse · </span>
+                    {detailsMaison.adresse}
+                    {detailsMaison.code_postal ? `, ${detailsMaison.code_postal}` : ""}
+                    {detailsMaison.ville ? ` · ${detailsMaison.ville}` : ""}
+                  </p>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                      {t.results.rooms}
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {detailsMaison.nb_chambres || "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                      Check-in
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {(detailsMaison.heure_checkin || "14:00").slice(0, 5)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                      Check-out
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {(detailsMaison.heure_checkout || "12:00").slice(0, 5)}
+                    </p>
+                  </div>
+                </div>
+
+                {(detailsMaison.services || []).length > 0 ? (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+                      Services
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {detailsMaison.services!.map((item) => (
+                        <span
+                          key={`svc-${item}`}
+                          className="rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {(detailsMaison.equipements || []).length > 0 ? (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+                      Équipements
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {detailsMaison.equipements!.map((item) => (
+                        <span
+                          key={`eq-${item}`}
+                          className="rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-foreground/70">
+                  {detailsMaison.telephone ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Phone className="h-4 w-4" /> {detailsMaison.telephone}
+                    </span>
+                  ) : null}
+                  {detailsMaison.whatsapp ? (
+                    <span>WhatsApp {detailsMaison.whatsapp}</span>
+                  ) : null}
+                  {detailsMaison.email ? <span>{detailsMaison.email}</span> : null}
+                  <span className="inline-flex items-center gap-1.5">
+                    <BadgeCheck
+                      className="h-4 w-4"
+                      style={{ color: "var(--olive-deep)" }}
+                    />
+                    {t.results.verified}
+                  </span>
+                </div>
+
+                <div className="rounded-2xl border border-black/5 bg-[#fbf8f3] px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {t.results.pricingFrom} · {roomTypeLabel}
+                  </p>
+                  <p className="mt-0.5 text-xl font-semibold" style={{ color: "var(--ink)" }}>
+                    {detailsMaison.prix_adulte_min != null &&
+                    Number(detailsMaison.prix_adulte_min) > 0
+                      ? formatMoney(
+                          Number(detailsMaison.prix_adulte_min),
+                          currency,
+                          isAppCurrency(detailsMaison.devise)
+                            ? detailsMaison.devise
+                            : "MAD"
+                        )
+                      : currencyLabel(currency)}
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      {t.results.perNightRoom(roomTypeLabel)}
+                    </span>
+                  </p>
+                </div>
+
+                <DialogFooter className="gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setDetailsMaison(null)}
+                    className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:bg-[#f7f2ea]"
+                  >
+                    Fermer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const maison = detailsMaison;
+                      setDetailsMaison(null);
+                      onReserve(maison);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold transition"
+                    style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
+                  >
+                    {t.results.book} <ArrowUpRight className="h-3.5 w-3.5" />
+                  </button>
+                </DialogFooter>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -2255,18 +2435,15 @@ function Landing() {
 
     try {
       const [catalog] = await Promise.all([
-        fetchMaisonsCatalog(next.destination || undefined),
+        fetchMaisonsCatalog(next.destination || undefined, {
+          adults: next.voyageurs.adults,
+        }),
         new Promise((resolve) => window.setTimeout(resolve, 900)),
       ]);
 
       const query = next.destination.trim().toLowerCase();
-      const guests = totalGuests(next.voyageurs);
 
       const filtered = catalog.filter((maison) => {
-        if (maison.capacite_max && maison.capacite_max < guests) {
-          return false;
-        }
-
         if (!query) {
           return true;
         }

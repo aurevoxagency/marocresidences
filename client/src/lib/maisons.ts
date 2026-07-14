@@ -26,7 +26,8 @@ export type MaisonListItem = {
   description: string | null;
   categorie: string | null;
   nb_chambres: number;
-  capacite_max: number;
+  lits_bebe_disponibles: boolean;
+  nb_lits_bebe: number;
   adresse: string | null;
   quartier: string | null;
   ville: string | null;
@@ -47,13 +48,14 @@ export type MaisonListItem = {
   heure_checkout: string | null;
   photo_principale?: string | null;
   prix_adulte_min?: number | string | null;
+  capacite_prix?: number | string | null;
   services?: string[];
   equipements?: string[];
   date_creation: string;
   date_maj: string;
 };
 
-export type MaisonDetail = MaisonListItem & {
+export type MaisonDetail = Omit<MaisonListItem, "services" | "equipements"> & {
   latitude: number | string | null;
   longitude: number | string | null;
   photos: MaisonPhoto[];
@@ -76,7 +78,8 @@ export type MaisonFormData = {
   description?: string;
   categorie?: string;
   nb_chambres?: number;
-  capacite_max?: number;
+  lits_bebe_disponibles?: boolean;
+  nb_lits_bebe?: number;
   adresse?: string;
   quartier?: string;
   ville?: string;
@@ -137,11 +140,18 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return data;
 }
 
-export async function fetchMaisonsCatalog(query?: string) {
+export async function fetchMaisonsCatalog(
+  query?: string,
+  options?: { adults?: number }
+) {
   const params = new URLSearchParams();
 
   if (query?.trim()) {
     params.set("q", query.trim());
+  }
+
+  if (options?.adults != null && options.adults >= 1) {
+    params.set("adults", String(Math.min(12, Math.floor(options.adults))));
   }
 
   const suffix = params.toString() ? `?${params.toString()}` : "";

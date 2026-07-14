@@ -85,6 +85,17 @@ const fr = {
     verified: "Maison vérifiée",
     pricingFrom: "À partir de",
     perNightAdult: "/ nuit / adulte",
+    perNightRoom: (type: string) => `/ nuit · ${type}`,
+    roomType: (n: number) => {
+      const labels: Record<number, string> = {
+        1: "Single",
+        2: "Double",
+        3: "Triple",
+        4: "Quadruple",
+        5: "Quintuple",
+      };
+      return labels[n] || `Capacité ${n}`;
+    },
     details: "Détails",
     book: "Réserver",
     selection: (n: number) => `Sélection #${n}`,
@@ -284,6 +295,17 @@ const en = {
     verified: "Verified home",
     pricingFrom: "From",
     perNightAdult: "/ night / adult",
+    perNightRoom: (type: string) => `/ night · ${type}`,
+    roomType: (n: number) => {
+      const labels: Record<number, string> = {
+        1: "Single",
+        2: "Double",
+        3: "Triple",
+        4: "Quadruple",
+        5: "Quintuple",
+      };
+      return labels[n] || `Capacity ${n}`;
+    },
     details: "Details",
     book: "Book",
     selection: (n: number) => `Pick #${n}`,

@@ -73,9 +73,11 @@ export type Reservation = {
   nb_adultes: number;
   nbrs_enfants: number;
   nbrs_bebe: number;
+  lit_bebe?: boolean | number;
   age_enfant: number;
   source: ReservationSource;
   promotion_id: number | null;
+  code_promo?: string | null;
   type_reduction: ReservationTypeReduction | null;
   valeur_reduction: number | string;
   supplement_id: number | null;
@@ -110,9 +112,11 @@ export type ReservationFormData = {
   nb_adultes?: number;
   nbrs_enfants?: number;
   nbrs_bebe?: number;
+  lit_bebe?: boolean | number;
   age_enfant?: number;
   source?: ReservationSource;
   promotion_id?: number | null;
+  code_promo?: string | null;
   type_reduction?: ReservationTypeReduction | null;
   valeur_reduction?: number;
   supplement_id?: number | null;
@@ -192,19 +196,19 @@ export function calculateReservationTotals(fields: {
   valeur_reduction?: number;
   taux_tva_applique: number;
 }) {
-  const subtotal =
+  const prixTotalHt =
     fields.prix_chambre_total +
     (fields.prix_bebe_total ?? 0) +
     (fields.prix_enfants_total ?? 0) +
     (fields.supplement_total ?? 0);
+  const montantTva = Math.round(prixTotalHt * (fields.taux_tva_applique / 100) * 100) / 100;
+  const ttcAvantReduction = Math.round((prixTotalHt + montantTva) * 100) / 100;
   const montantReduction = computeMontantReduction(
-    subtotal,
+    ttcAvantReduction,
     fields.type_reduction,
     fields.valeur_reduction
   );
-  const prixTotalHt = Math.max(0, subtotal - montantReduction);
-  const montantTva = Math.round(prixTotalHt * (fields.taux_tva_applique / 100) * 100) / 100;
-  const prixTotalTtc = Math.round((prixTotalHt + montantTva) * 100) / 100;
+  const prixTotalTtc = Math.max(0, Math.round((ttcAvantReduction - montantReduction) * 100) / 100);
 
   return {
     montant_reduction: montantReduction,

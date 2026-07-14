@@ -35,6 +35,16 @@ function emptyToNull(value) {
   return value;
 }
 
+function normalizeCodePromo(value) {
+  const code = emptyToNull(value);
+
+  if (!code) {
+    return null;
+  }
+
+  return String(code).trim().toUpperCase().slice(0, 50) || null;
+}
+
 function toIntOrDefault(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.trunc(number) : fallback;
@@ -43,6 +53,14 @@ function toIntOrDefault(value, fallback = 0) {
 function toDecimalOrDefault(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.round(number * 100) / 100 : fallback;
+}
+
+function toBool(value) {
+  if (value === true || value === 1 || value === "1" || value === "true" || value === "on") {
+    return true;
+  }
+
+  return false;
 }
 
 function computeMontantReduction(subtotal, typeReduction, valeurReduction) {
@@ -78,20 +96,23 @@ function pickReservationFields(body = {}) {
   const typeReduction = TYPES_REDUCTION.has(body.type_reduction) ? body.type_reduction : null;
   const valeurReduction = toDecimalOrDefault(body.valeur_reduction, 0);
   const subtotal = prixChambre + prixBebe + prixEnfants;
-  const montantReduction = computeMontantReduction(subtotal, typeReduction, valeurReduction);
   const tauxTva = toDecimalOrDefault(body.taux_tva_applique, 0);
   const prixTotalHt =
-    body.prix_total_ht != null
-      ? toDecimalOrDefault(body.prix_total_ht)
-      : Math.max(0, subtotal - montantReduction);
+    body.prix_total_ht != null ? toDecimalOrDefault(body.prix_total_ht) : subtotal;
   const montantTva =
     body.montant_tva != null
       ? toDecimalOrDefault(body.montant_tva)
       : Math.round(prixTotalHt * (tauxTva / 100) * 100) / 100;
+  const ttcAvantReduction = Math.round((prixTotalHt + montantTva) * 100) / 100;
+  const montantReduction = computeMontantReduction(
+    ttcAvantReduction,
+    typeReduction,
+    valeurReduction
+  );
   const prixTotalTtc =
     body.prix_total_ttc != null
       ? toDecimalOrDefault(body.prix_total_ttc)
-      : Math.round((prixTotalHt + montantTva) * 100) / 100;
+      : Math.max(0, Math.round((ttcAvantReduction - montantReduction) * 100) / 100);
 
   return {
     client_id: toIntOrDefault(body.client_id, 0),
@@ -103,9 +124,11 @@ function pickReservationFields(body = {}) {
     nb_adultes: Math.max(1, toIntOrDefault(body.nb_adultes, 1)),
     nbrs_enfants: Math.max(0, toIntOrDefault(body.nbrs_enfants, 0)),
     nbrs_bebe: Math.max(0, toIntOrDefault(body.nbrs_bebe, 0)),
+    lit_bebe: toBool(body.lit_bebe) ? 1 : 0,
     age_enfant: Math.max(0, toIntOrDefault(body.age_enfant, 0)),
     source: SOURCES.has(body.source) ? body.source : "autre",
     promotion_id: emptyToNull(body.promotion_id) ? toIntOrDefault(body.promotion_id, 0) : null,
+    code_promo: normalizeCodePromo(body.code_promo),
     type_reduction: typeReduction,
     valeur_reduction: typeReduction ? valeurReduction : 0,
     supplement_id: emptyToNull(body.supplement_id) ? toIntOrDefault(body.supplement_id, 0) : null,
@@ -543,6 +566,14 @@ async function createReservation(req, res) {
       fields.age_enfant = firstChild?.age_enfant ?? 0;
     }
 
+    if (fields.promotion_id && !fields.code_promo) {
+      const [promoRows] = await connection.query(
+        "SELECT code_promo FROM promotions WHERE id = ? LIMIT 1",
+        [fields.promotion_id]
+      );
+      fields.code_promo = normalizeCodePromo(promoRows[0]?.code_promo);
+    }
+
     await connection.beginTransaction();
 
     const reference = await generateReference(connection);
@@ -551,12 +582,12 @@ async function createReservation(req, res) {
       `
         INSERT INTO reservations (
           reference, client_id, chambre_id, maison_id,
-          date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, age_enfant,
-          source, promotion_id, type_reduction, valeur_reduction, supplement_id,
+          date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, lit_bebe, age_enfant,
+          source, promotion_id, code_promo, type_reduction, valeur_reduction, supplement_id,
           prix_chambre_total, prix_bebe_total, prix_enfants_total,
           prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc,
           statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -569,9 +600,11 @@ async function createReservation(req, res) {
         fields.nb_adultes,
         fields.nbrs_enfants,
         fields.nbrs_bebe,
+        fields.lit_bebe,
         fields.age_enfant,
         fields.source,
         fields.promotion_id,
+        fields.code_promo,
         fields.type_reduction,
         fields.valeur_reduction,
         fields.supplement_id,
@@ -645,14 +678,26 @@ async function updateReservation(req, res) {
 
     const previousClientId = existingRows[0].client_id;
 
+    if (fields.promotion_id && !fields.code_promo) {
+      const [promoRows] = await connection.query(
+        "SELECT code_promo FROM promotions WHERE id = ? LIMIT 1",
+        [fields.promotion_id]
+      );
+      fields.code_promo = normalizeCodePromo(promoRows[0]?.code_promo);
+    }
+
+    if (!fields.promotion_id) {
+      fields.code_promo = null;
+    }
+
     await connection.beginTransaction();
 
     const [result] = await connection.query(
       `
         UPDATE reservations SET
           client_id = ?, chambre_id = ?, maison_id = ?,
-          date_arrivee = ?, date_depart = ?, nb_nuits = ?, nb_adultes = ?, nbrs_enfants = ?, nbrs_bebe = ?, age_enfant = ?,
-          source = ?, promotion_id = ?, type_reduction = ?, valeur_reduction = ?, supplement_id = ?,
+          date_arrivee = ?, date_depart = ?, nb_nuits = ?, nb_adultes = ?, nbrs_enfants = ?, nbrs_bebe = ?, lit_bebe = ?, age_enfant = ?,
+          source = ?, promotion_id = ?, code_promo = ?, type_reduction = ?, valeur_reduction = ?, supplement_id = ?,
           prix_chambre_total = ?, prix_bebe_total = ?, prix_enfants_total = ?,
           prix_total_ht = ?, taux_tva_applique = ?, montant_tva = ?, prix_total_ttc = ?,
           statut_reservation = ?, statut_paiement = ?, montant_paye = ?, notes = ?
@@ -668,9 +713,11 @@ async function updateReservation(req, res) {
         fields.nb_adultes,
         fields.nbrs_enfants,
         fields.nbrs_bebe,
+        fields.lit_bebe,
         fields.age_enfant,
         fields.source,
         fields.promotion_id,
+        fields.code_promo,
         fields.type_reduction,
         fields.valeur_reduction,
         fields.supplement_id,
@@ -834,10 +881,21 @@ async function createPublicReservation(req, res) {
       statut_paiement: "non_paye",
       montant_paye: 0,
       promotion_id: req.body.promotion_id ?? null,
+      code_promo: req.body.code_promo ?? null,
       type_reduction: req.body.type_reduction ?? null,
       valeur_reduction: req.body.valeur_reduction ?? 0,
       supplement_id: null,
+      lit_bebe: req.body.lit_bebe,
     });
+    fields.lit_bebe = toBool(req.body.lit_bebe) ? 1 : 0;
+
+    if (fields.promotion_id && !fields.code_promo) {
+      const [promoRows] = await connection.query(
+        "SELECT code_promo FROM promotions WHERE id = ? LIMIT 1",
+        [fields.promotion_id]
+      );
+      fields.code_promo = normalizeCodePromo(promoRows[0]?.code_promo);
+    }
 
     const occupants = pickOccupants(req.body);
 
@@ -883,12 +941,12 @@ async function createPublicReservation(req, res) {
       `
         INSERT INTO reservations (
           reference, client_id, chambre_id, maison_id,
-          date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, age_enfant,
-          source, promotion_id, type_reduction, valeur_reduction, supplement_id,
+          date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, lit_bebe, age_enfant,
+          source, promotion_id, code_promo, type_reduction, valeur_reduction, supplement_id,
           prix_chambre_total, prix_bebe_total, prix_enfants_total,
           prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc,
           statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -901,9 +959,11 @@ async function createPublicReservation(req, res) {
         fields.nb_adultes,
         fields.nbrs_enfants,
         fields.nbrs_bebe,
+        fields.lit_bebe,
         fields.age_enfant,
         fields.source,
         fields.promotion_id,
+        fields.code_promo,
         fields.type_reduction,
         fields.valeur_reduction,
         fields.supplement_id,
@@ -920,6 +980,23 @@ async function createPublicReservation(req, res) {
         fields.notes,
       ]
     );
+
+    await connection.query("UPDATE reservations SET lit_bebe = ? WHERE id = ?", [
+      fields.lit_bebe,
+      result.insertId,
+    ]);
+
+    if (fields.promotion_id) {
+      await connection.query(
+        `
+          UPDATE promotions
+          SET utilisation_actuelle = utilisation_actuelle + 1
+          WHERE id = ?
+            AND (utilisation_max IS NULL OR utilisation_actuelle < utilisation_max)
+        `,
+        [fields.promotion_id]
+      );
+    }
 
     await syncReservationOccupants(connection, result.insertId, occupants);
     await syncClientReservationStats(connection, fields.client_id);

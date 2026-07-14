@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -358,6 +359,7 @@ type FormState = {
   nb_adultes: string;
   nbrs_enfants: string;
   nbrs_bebe: string;
+  lit_bebe: boolean;
   source: ReservationSource;
   promotion_id: string;
   supplement_id: string;
@@ -383,6 +385,7 @@ function emptyForm(maisonId = ""): FormState {
     nb_adultes: "1",
     nbrs_enfants: "0",
     nbrs_bebe: "0",
+    lit_bebe: false,
     source: "autre",
     promotion_id: "",
     supplement_id: "",
@@ -422,6 +425,7 @@ function toFormState(reservation: Reservation): FormState {
     nb_adultes: String(reservation.nb_adultes),
     nbrs_enfants: String(reservation.nbrs_enfants ?? 0),
     nbrs_bebe: String(reservation.nbrs_bebe ?? 0),
+    lit_bebe: Boolean(reservation.lit_bebe === true || reservation.lit_bebe === 1),
     source: reservation.source,
     promotion_id: reservation.promotion_id ? String(reservation.promotion_id) : "",
     supplement_id: reservation.supplement_id ? String(reservation.supplement_id) : "",
@@ -921,6 +925,7 @@ export function ReservationsManagement() {
         nb_adultes: detailed.nb_adultes,
         nbrs_enfants: detailed.nbrs_enfants,
         nbrs_bebe: detailed.nbrs_bebe,
+        lit_bebe: Number(detailed.lit_bebe) === 1 || detailed.lit_bebe === true ? 1 : 0,
         age_enfant: detailed.age_enfant,
         source: detailed.source,
         promotion_id: detailed.promotion_id,
@@ -1185,9 +1190,12 @@ export function ReservationsManagement() {
       nb_adultes: nbAdultes,
       nbrs_enfants: nbrsEnfants,
       nbrs_bebe: nbrsBebe,
+      lit_bebe: form.lit_bebe ? 1 : 0,
       age_enfant: firstChildAge || 0,
       source: form.source,
       promotion_id: form.promotion_id ? Number(form.promotion_id) : null,
+      code_promo:
+        promotions.find((item) => String(item.id) === form.promotion_id)?.code_promo || null,
       type_reduction: form.type_reduction || null,
       valeur_reduction: Number(form.valeur_reduction) || 0,
       supplement_id: null,
@@ -1513,11 +1521,16 @@ export function ReservationsManagement() {
                           selectedPromotion
                         );
 
+                        const typeLabel = chambre.type_nom?.trim();
+                        const nameWithType = typeLabel
+                          ? `${chambre.nom} · ${typeLabel}`
+                          : chambre.nom;
+
                         return (
                           <SelectItem key={chambre.id} value={String(chambre.id)}>
                             {nightly != null
-                              ? `${chambre.nom} · ${nightly.toLocaleString("fr-FR")} MAD/nuit`
-                              : chambre.nom}
+                              ? `${nameWithType} · ${nightly.toLocaleString("fr-FR")} MAD/nuit`
+                              : nameWithType}
                           </SelectItem>
                         );
                       })}
@@ -1598,9 +1611,21 @@ export function ReservationsManagement() {
                         ...c,
                         nbrs_bebe: e.target.value,
                         prix_bebe_total: Number(e.target.value) > 0 ? c.prix_bebe_total : "0",
+                        lit_bebe: Number(e.target.value) > 0 ? c.lit_bebe : false,
                       }))
                     }
                   />
+                  {nbrsBebe > 0 ? (
+                    <label className="flex items-center gap-2 pt-1 text-sm">
+                      <Checkbox
+                        checked={form.lit_bebe}
+                        onCheckedChange={(checked) =>
+                          setForm((c) => ({ ...c, lit_bebe: checked === true }))
+                        }
+                      />
+                      Lit bébé demandé
+                    </label>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
@@ -2270,19 +2295,6 @@ export function ReservationsManagement() {
                     <span>{formatMoney(supplementTotal)}</span>
                   </div>
                 ) : null}
-                {computedTotals.montant_reduction > 0 ? (
-                  <div className="flex items-center justify-between gap-3 text-emerald-700">
-                    <span>
-                      Réduction
-                      {form.type_reduction === "%"
-                        ? ` (${form.valeur_reduction}%)`
-                        : form.type_reduction === "MAD"
-                          ? ` (${form.valeur_reduction} MAD)`
-                          : ""}
-                    </span>
-                    <span>- {formatMoney(computedTotals.montant_reduction)}</span>
-                  </div>
-                ) : null}
                 <div className="mt-2 border-t border-slate-200 pt-2">
                   <div className="flex items-center justify-between gap-3">
                     <span>Total HT</span>
@@ -2292,6 +2304,19 @@ export function ReservationsManagement() {
                     <span>TVA ({form.taux_tva_applique}%)</span>
                     <span>{formatMoney(computedTotals.montant_tva)}</span>
                   </div>
+                  {computedTotals.montant_reduction > 0 ? (
+                    <div className="flex items-center justify-between gap-3 text-emerald-700">
+                      <span>
+                        Réduction
+                        {form.type_reduction === "%"
+                          ? ` (${form.valeur_reduction}%)`
+                          : form.type_reduction === "MAD"
+                            ? ` (${form.valeur_reduction} MAD)`
+                            : ""}
+                      </span>
+                      <span>- {formatMoney(computedTotals.montant_reduction)}</span>
+                    </div>
+                  ) : null}
                   <div className="mt-1 flex items-center justify-between gap-3 text-[15px] font-semibold text-slate-900">
                     <span>Total TTC</span>
                     <span>{formatMoney(computedTotals.prix_total_ttc)}</span>
@@ -2429,10 +2454,19 @@ export function ReservationsManagement() {
 
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-900">Voyageurs</h3>
-                  <div className="grid gap-4 rounded-2xl border border-slate-200 p-4 sm:grid-cols-3">
+                  <div className="grid gap-4 rounded-2xl border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-4">
                     <FicheInfoItem label="Adultes" value={viewReservation.nb_adultes} />
                     <FicheInfoItem label="Enfants" value={viewReservation.nbrs_enfants} />
                     <FicheInfoItem label="Bébés" value={viewReservation.nbrs_bebe} />
+                    <FicheInfoItem
+                      label="Lit bébé"
+                      value={
+                        Number(viewReservation.lit_bebe) === 1 ||
+                        viewReservation.lit_bebe === true
+                          ? "Demandé"
+                          : "Non"
+                      }
+                    />
                   </div>
                   {viewReservation.occupants && viewReservation.occupants.length > 0 ? (
                     <div className="space-y-3">
@@ -2571,9 +2605,8 @@ export function ReservationsManagement() {
                                 : formatMoney(viewReservation.valeur_reduction)
                             } (−${formatMoney(
                               computeMontantReduction(
-                                Number(viewReservation.prix_chambre_total) +
-                                  Number(viewReservation.prix_bebe_total) +
-                                  Number(viewReservation.prix_enfants_total),
+                                Number(viewReservation.prix_total_ht) +
+                                  Number(viewReservation.montant_tva),
                                 viewReservation.type_reduction,
                                 Number(viewReservation.valeur_reduction)
                               )
@@ -2584,6 +2617,10 @@ export function ReservationsManagement() {
                     <FicheInfoItem
                       label="Promotion"
                       value={viewReservation.promotion_nom || "Aucune"}
+                    />
+                    <FicheInfoItem
+                      label="Code promo"
+                      value={viewReservation.code_promo || "—"}
                     />
                     <FicheInfoItem
                       label="Suppléments"

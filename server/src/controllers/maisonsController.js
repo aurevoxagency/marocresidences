@@ -26,6 +26,10 @@ function toIntOrDefault(value, fallback = 0) {
   return Number.isFinite(number) ? Math.trunc(number) : fallback;
 }
 
+function toBool(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
 function normalizeTime(value, fallback = null) {
   if (!value) {
     return fallback;
@@ -45,12 +49,18 @@ function normalizeTime(value, fallback = null) {
 }
 
 function pickMaisonFields(body = {}) {
+  const litsBebeDisponibles = toBool(body.lits_bebe_disponibles);
+  const nbLitsBebe = litsBebeDisponibles
+    ? Math.max(0, toIntOrDefault(body.nb_lits_bebe, 0))
+    : 0;
+
   return {
     nom: body.nom?.trim() || null,
     description: body.description?.trim() || null,
     categorie: body.categorie?.trim() || null,
     nb_chambres: toIntOrDefault(body.nb_chambres, 0),
-    capacite_max: toIntOrDefault(body.capacite_max, 0),
+    lits_bebe_disponibles: litsBebeDisponibles,
+    nb_lits_bebe: nbLitsBebe,
     adresse: body.adresse?.trim() || null,
     quartier: body.quartier?.trim() || null,
     ville: body.ville?.trim() || null,
@@ -135,6 +145,8 @@ async function fetchMaisonById(connection, id) {
 
   return {
     ...maison,
+    lits_bebe_disponibles: toBool(maison.lits_bebe_disponibles),
+    nb_lits_bebe: toIntOrDefault(maison.nb_lits_bebe, 0),
     photos: photos.map((photo) => ({
       ...photo,
       est_principale: Boolean(photo.est_principale),
@@ -264,6 +276,11 @@ async function getMaisons(req, res) {
 async function getMaisonsCatalog(req, res) {
   try {
     const q = String(req.query.q || "").trim();
+    const adultsRaw = Number(req.query.adults);
+    const adults =
+      Number.isFinite(adultsRaw) && adultsRaw >= 1
+        ? Math.min(12, Math.floor(adultsRaw))
+        : null;
     const params = [];
     let where = "WHERE m.statut = 'actif'";
 
@@ -284,7 +301,6 @@ async function getMaisonsCatalog(req, res) {
           m.description,
           m.categorie,
           m.nb_chambres,
-          m.capacite_max,
           m.adresse,
           m.quartier,
           m.ville,
@@ -315,12 +331,31 @@ async function getMaisonsCatalog(req, res) {
 
     const ids = rows.map((row) => row.id);
 
+    // 1 adult → Single, 2 → Double, 3 → Triple, … (match types_chambre.nom)
+    const ROOM_TYPE_BY_ADULTS = {
+      1: "Single",
+      2: "Double",
+      3: "Triple",
+      4: "Quadruple",
+      5: "Quintuple",
+    };
+    const roomTypeName =
+      adults != null ? ROOM_TYPE_BY_ADULTS[Math.min(5, adults)] || null : null;
+
+    const typeJoin = roomTypeName
+      ? "INNER JOIN types_chambre ty ON ty.id = c.type_id AND LOWER(ty.nom) = LOWER(?)"
+      : "";
+    const priceParams = roomTypeName ? [roomTypeName, ids] : [ids];
+
     const [priceRows] = await pool.query(
       `
         SELECT
           c.maison_id,
-          MIN(tc.prix_adulte) AS prix_adulte_min
+          MIN(tc.prix_adulte) AS prix_adulte_min,
+          MIN(c.capacite_max) AS capacite_type,
+          MIN(ty.nom) AS type_nom
         FROM chambres c
+        ${typeJoin || "LEFT JOIN types_chambre ty ON ty.id = c.type_id"}
         INNER JOIN tarifs_chambre tc ON tc.chambre_id = c.id
         INNER JOIN saisons s ON s.id = tc.saison_id AND s.maison_id = c.maison_id
         WHERE c.maison_id IN (?)
@@ -337,11 +372,17 @@ async function getMaisonsCatalog(req, res) {
           )
         GROUP BY c.maison_id
       `,
-      [ids]
+      priceParams
     );
 
     const prixByMaison = new Map(
       priceRows.map((row) => [row.maison_id, Number(row.prix_adulte_min)])
+    );
+    const capaciteByMaison = new Map(
+      priceRows.map((row) => [
+        row.maison_id,
+        adults != null ? adults : Number(row.capacite_type),
+      ])
     );
 
     const [services] = await pool.query(
@@ -383,8 +424,9 @@ async function getMaisonsCatalog(req, res) {
       rows.map((row) => ({
         ...row,
         prix_adulte_min: prixByMaison.get(row.id) ?? null,
-        services: (servicesByMaison.get(row.id) || []).slice(0, 6),
-        equipements: (equipementsByMaison.get(row.id) || []).slice(0, 6),
+        capacite_prix: capaciteByMaison.get(row.id) ?? adults ?? null,
+        services: servicesByMaison.get(row.id) || [],
+        equipements: equipementsByMaison.get(row.id) || [],
       }))
     );
   } catch (error) {
@@ -423,19 +465,21 @@ async function createMaison(req, res) {
     const [result] = await connection.query(
       `
         INSERT INTO maisons_hotes (
-          nom, description, categorie, nb_chambres, capacite_max,
+          nom, description, categorie, nb_chambres,
+          lits_bebe_disponibles, nb_lits_bebe,
           adresse, quartier, ville, code_postal, pays,
           latitude, longitude, telephone, whatsapp, email, site_web,
           devise, taux_tva, numero_patente, numero_ice, numero_classement,
           statut, heure_checkin, heure_checkout
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         fields.nom,
         fields.description,
         fields.categorie,
         fields.nb_chambres,
-        fields.capacite_max,
+        fields.lits_bebe_disponibles,
+        fields.nb_lits_bebe,
         fields.adresse,
         fields.quartier,
         fields.ville,
@@ -493,7 +537,8 @@ async function updateMaison(req, res) {
     const [result] = await connection.query(
       `
         UPDATE maisons_hotes SET
-          nom = ?, description = ?, categorie = ?, nb_chambres = ?, capacite_max = ?,
+          nom = ?, description = ?, categorie = ?, nb_chambres = ?,
+          lits_bebe_disponibles = ?, nb_lits_bebe = ?,
           adresse = ?, quartier = ?, ville = ?, code_postal = ?, pays = ?,
           latitude = ?, longitude = ?, telephone = ?, whatsapp = ?, email = ?, site_web = ?,
           devise = ?, taux_tva = ?, numero_patente = ?, numero_ice = ?, numero_classement = ?,
@@ -505,7 +550,8 @@ async function updateMaison(req, res) {
         fields.description,
         fields.categorie,
         fields.nb_chambres,
-        fields.capacite_max,
+        fields.lits_bebe_disponibles,
+        fields.nb_lits_bebe,
         fields.adresse,
         fields.quartier,
         fields.ville,
