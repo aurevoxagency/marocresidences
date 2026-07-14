@@ -170,14 +170,9 @@ function buildDestinationCards(maisons: MaisonListItem[]) {
     });
 }
 
-const navDestinations = [
-  "Marrakech",
-  "Essaouira",
-  "Tanger",
-  "Chefchaouen",
-  "M'hamid",
-  "Vallée du Dadès",
-];
+function getDestinationCities(maisons: MaisonListItem[]) {
+  return buildDestinationCards(maisons).map((item) => item.name);
+}
 
 type VoyageursState = {
   adults: number;
@@ -265,7 +260,13 @@ function roomTypeCapacity(adults: number) {
 
 const advantageIcons = [ShieldCheck, BadgeCheck, Headphones] as const;
 
-function Nav() {
+function Nav({
+  destinations,
+  onSelectDestination,
+}: {
+  destinations: string[];
+  onSelectDestination?: (ville: string) => void;
+}) {
   const { currency, setCurrency } = useCurrency();
   const { language, setLanguage, t } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
@@ -358,11 +359,21 @@ function Nav() {
               <ChevronDown className="h-3.5 w-3.5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-44">
-              {navDestinations.map((city) => (
-                <DropdownMenuItem key={city} asChild>
-                  <a href="#destinations">{city}</a>
-                </DropdownMenuItem>
-              ))}
+              {destinations.length === 0 ? (
+                <DropdownMenuItem disabled>Aucune destination</DropdownMenuItem>
+              ) : (
+                destinations.map((city) => (
+                  <DropdownMenuItem
+                    key={city}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      onSelectDestination?.(city);
+                    }}
+                  >
+                    {city}
+                  </DropdownMenuItem>
+                ))
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <a href="#maisons" className="opacity-80 transition hover:opacity-100">{t.nav.maisons}</a>
@@ -498,16 +509,23 @@ function Nav() {
                 <SheetTitle>Menu</SheetTitle>
               </SheetHeader>
               <nav className="flex flex-col gap-1 px-3 py-4 text-sm">
-                {navDestinations.map((city) => (
-                  <a
-                    key={city}
-                    href="#destinations"
-                    className="rounded-xl px-3 py-2.5 text-foreground/80 transition hover:bg-muted hover:text-foreground"
-                    onClick={() => setMobileNavOpen(false)}
-                  >
-                    {city}
-                  </a>
-                ))}
+                {destinations.length === 0 ? (
+                  <p className="px-3 py-2.5 text-foreground/50">Aucune destination</p>
+                ) : (
+                  destinations.map((city) => (
+                    <button
+                      key={city}
+                      type="button"
+                      className="rounded-xl px-3 py-2.5 text-left text-foreground/80 transition hover:bg-muted hover:text-foreground"
+                      onClick={() => {
+                        setMobileNavOpen(false);
+                        onSelectDestination?.(city);
+                      }}
+                    >
+                      {city}
+                    </button>
+                  ))
+                )}
                 <div className="my-2 border-t border-border" />
                 {(
                   [
@@ -983,11 +1001,14 @@ function SearchBar({
 function Hero({
   maisons,
   onSearch,
+  onSelectDestination,
 }: {
   maisons: MaisonListItem[];
   onSearch: (criteria: SearchCriteria) => void;
+  onSelectDestination: (ville: string) => void;
 }) {
   const { t } = useLanguage();
+  const destinations = useMemo(() => getDestinationCities(maisons), [maisons]);
 
   return (
     <section className="relative min-h-[100svh] w-full overflow-x-hidden overflow-y-hidden">
@@ -1011,18 +1032,11 @@ function Hero({
         }}
       />
 
-      <Nav />
+      <Nav destinations={destinations} onSelectDestination={onSelectDestination} />
 
       <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-7xl flex-col items-center justify-center px-4 pt-24 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-24 lg:px-10">
-        <div
-          className="glass inline-flex max-w-full items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-medium sm:px-4 sm:text-xs"
-          style={{ color: "var(--ink)" }}
-        >
-          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "var(--terracotta)" }} />
-          <span className="truncate">{t.hero.badge}</span>
-        </div>
         <h1
-          className="mt-4 max-w-4xl text-balance text-[2rem] leading-[1.08] sm:mt-6 sm:text-5xl sm:leading-[1.02] lg:text-7xl"
+          className="max-w-4xl text-balance text-[2rem] leading-[1.08] sm:text-5xl sm:leading-[1.02] lg:text-7xl"
           style={{ color: "var(--cream)" }}
         >
           {t.hero.titleLine1}<br />
@@ -1037,12 +1051,6 @@ function Hero({
 
         <div className="w-full min-w-0">
           <SearchBar maisons={maisons} onSearch={onSearch} />
-        </div>
-
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] sm:mt-12 sm:gap-x-8 sm:gap-y-3 sm:text-xs" style={{ color: "color-mix(in oklab, var(--cream) 75%, transparent)" }}>
-          <span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 shrink-0" /> {t.hero.statMaisons}</span>
-          <span className="inline-flex items-center gap-2"><Star className="h-4 w-4 shrink-0" /> {t.hero.statRating}</span>
-          <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 shrink-0" /> {t.hero.statPayment}</span>
         </div>
       </div>
     </section>
@@ -2487,7 +2495,11 @@ function Landing() {
     <CurrencyProvider>
       <LanguageProvider>
         <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
-          <Hero maisons={maisons} onSearch={handleSearch} />
+          <Hero
+            maisons={maisons}
+            onSearch={handleSearch}
+            onSelectDestination={handleSelectDestination}
+          />
           <SearchResults
             criteria={criteria}
             results={results}

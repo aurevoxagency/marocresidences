@@ -42,14 +42,10 @@ const fr = {
     language: "Langue",
   },
   hero: {
-    badge: "Nouveau — Sélection curatée pour l'automne",
     titleLine1: "L'art de séjourner",
     titleLine2: "au Maroc.",
     subtitle:
       "Des riads et maisons d'hôtes vérifiés, choisis un à un pour vous offrir une hospitalité qui ne s'oublie pas.",
-    statMaisons: "+1 200 maisons vérifiées",
-    statRating: "4,92 / 5 en moyenne",
-    statPayment: "Paiement sécurisé",
     heroAlt: "Riad marocain au coucher du soleil",
   },
   search: {
@@ -252,14 +248,10 @@ const en = {
     language: "Language",
   },
   hero: {
-    badge: "New — Curated selection for autumn",
     titleLine1: "The art of staying",
     titleLine2: "in Morocco.",
     subtitle:
       "Verified riads and guesthouses, hand-picked to offer hospitality you will never forget.",
-    statMaisons: "+1,200 verified homes",
-    statRating: "4.92 / 5 average",
-    statPayment: "Secure payment",
     heroAlt: "Moroccan riad at sunset",
   },
   search: {
