@@ -102,10 +102,12 @@ function findSaisonForDate(saisons: Saison[], date?: string) {
     return saisons[0]?.id;
   }
 
+  const day = toDateOnlyLocal(date);
+
   const match = saisons.find((saison) => {
-    const start = String(saison.date_debut).slice(0, 10);
-    const end = String(saison.date_fin).slice(0, 10);
-    return date >= start && date <= end;
+    const start = toDateOnlyLocal(saison.date_debut);
+    const end = toDateOnlyLocal(saison.date_fin);
+    return Boolean(start && end && day >= start && day <= end);
   });
 
   return match?.id ?? saisons[0]?.id;
@@ -402,8 +404,45 @@ function emptyForm(maisonId = ""): FormState {
   };
 }
 
+function toDateOnlyLocal(value?: string | Date | null) {
+  if (!value) {
+    return "";
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return "";
+    }
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+
+  const raw = String(value).trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  // Already a calendar date (yyyy-mm-dd)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  // ISO / MySQL datetime — convert with local timezone (avoid UTC slice off-by-one)
+  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+  const date = new Date(normalized);
+
+  if (Number.isNaN(date.getTime())) {
+    return raw.slice(0, 10);
+  }
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function dateInput(value?: string | null) {
-  return value ? String(value).slice(0, 10) : "";
+  return toDateOnlyLocal(value);
 }
 
 function formatMoney(value?: number | string | null) {
@@ -443,14 +482,16 @@ function toFormState(reservation: Reservation): FormState {
 }
 
 function formatDateDisplay(value?: string | null) {
-  if (!value) {
+  const iso = toDateOnlyLocal(value);
+
+  if (!iso) {
     return "—";
   }
 
-  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  const date = new Date(`${iso}T12:00:00`);
 
   if (Number.isNaN(date.getTime())) {
-    return String(value).slice(0, 10);
+    return iso;
   }
 
   return date.toLocaleDateString("fr-FR", {
@@ -920,8 +961,8 @@ export function ReservationsManagement() {
         client_id: detailed.client_id,
         maison_id: detailed.maison_id,
         chambre_id: detailed.chambre_id,
-        date_arrivee: String(detailed.date_arrivee).slice(0, 10),
-        date_depart: String(detailed.date_depart).slice(0, 10),
+        date_arrivee: toDateOnlyLocal(detailed.date_arrivee),
+        date_depart: toDateOnlyLocal(detailed.date_depart),
         nb_adultes: detailed.nb_adultes,
         nbrs_enfants: detailed.nbrs_enfants,
         nbrs_bebe: detailed.nbrs_bebe,

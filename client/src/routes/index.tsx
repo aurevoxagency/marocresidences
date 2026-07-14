@@ -15,7 +15,6 @@ import {
   Minus,
   Plus,
   BedDouble,
-  Baby,
   Clock3,
   Wifi,
   Sparkles,
@@ -174,6 +173,196 @@ function getDestinationCities(maisons: MaisonListItem[]) {
   return buildDestinationCards(maisons).map((item) => item.name);
 }
 
+function MaisonDetailsDialog({
+  maison,
+  onClose,
+  priceHint,
+  primaryLabel,
+  onPrimary,
+}: {
+  maison: MaisonListItem | null;
+  onClose: () => void;
+  priceHint: string;
+  primaryLabel: string;
+  onPrimary: (maison: MaisonListItem) => void;
+}) {
+  const { currency } = useCurrency();
+  const { t } = useLanguage();
+
+  return (
+    <Dialog
+      open={Boolean(maison)}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl">
+        {maison ? (
+          <>
+            <div className="relative h-48 w-full overflow-hidden sm:h-56">
+              <img
+                src={resolvePhotoUrl(maison.photo_principale) || house1}
+                alt={maison.nom}
+                className="h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 p-5 text-white">
+                <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/80">
+                  <MapPin className="h-3.5 w-3.5" />
+                  {[maison.quartier, maison.ville, maison.pays].filter(Boolean).join(" · ") ||
+                    "Maroc"}
+                </p>
+                <DialogHeader className="mt-1 space-y-0 p-0 text-left">
+                  <DialogTitle className="text-2xl text-white sm:text-3xl">
+                    {maison.nom}
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Détails de {maison.nom}
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              {maison.categorie ? (
+                <span className="inline-flex rounded-full bg-[#f7f2ea] px-3 py-1 text-xs font-semibold text-foreground/70">
+                  {maison.categorie}
+                </span>
+              ) : null}
+
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {maison.description?.trim() || t.results.defaultDescription}
+              </p>
+
+              {maison.adresse ? (
+                <p className="text-sm text-foreground/70">
+                  <span className="font-medium text-foreground">Adresse · </span>
+                  {maison.adresse}
+                  {maison.code_postal ? `, ${maison.code_postal}` : ""}
+                  {maison.ville ? ` · ${maison.ville}` : ""}
+                </p>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                    {t.results.rooms}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">{maison.nb_chambres || "—"}</p>
+                </div>
+                <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                    Check-in
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {(maison.heure_checkin || "14:00").slice(0, 5)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
+                    Check-out
+                  </p>
+                  <p className="mt-1 text-lg font-semibold">
+                    {(maison.heure_checkout || "12:00").slice(0, 5)}
+                  </p>
+                </div>
+              </div>
+
+              {(maison.services || []).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+                    Services
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {maison.services!.map((item) => (
+                      <span
+                        key={`svc-${item}`}
+                        className="rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {(maison.equipements || []).length > 0 ? (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
+                    Équipements
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {maison.equipements!.map((item) => (
+                      <span
+                        key={`eq-${item}`}
+                        className="rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-foreground/70">
+                {maison.telephone ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Phone className="h-4 w-4" /> {maison.telephone}
+                  </span>
+                ) : null}
+                {maison.whatsapp ? <span>WhatsApp {maison.whatsapp}</span> : null}
+                {maison.email ? <span>{maison.email}</span> : null}
+                <span className="inline-flex items-center gap-1.5">
+                  <BadgeCheck className="h-4 w-4" style={{ color: "var(--olive-deep)" }} />
+                  {t.results.verified}
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-black/5 bg-[#fbf8f3] px-4 py-3">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {t.results.pricingFrom}
+                </p>
+                <p className="mt-0.5 text-xl font-semibold" style={{ color: "var(--ink)" }}>
+                  {maison.prix_adulte_min != null && Number(maison.prix_adulte_min) > 0
+                    ? formatMoney(
+                        Number(maison.prix_adulte_min),
+                        currency,
+                        isAppCurrency(maison.devise) ? maison.devise : "MAD"
+                      )
+                    : currencyLabel(currency)}
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    {priceHint}
+                  </span>
+                </p>
+              </div>
+
+              <DialogFooter className="gap-2 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:bg-[#f7f2ea]"
+                >
+                  Fermer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPrimary(maison)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold transition"
+                  style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
+                >
+                  {primaryLabel} <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              </DialogFooter>
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type VoyageursState = {
   adults: number;
   childrenAges: number[];
@@ -193,6 +382,12 @@ function toIsoDate(date?: Date) {
   }
 
   return format(date, "yyyy-MM-dd");
+}
+
+function startOfLocalToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
 }
 
 function fromIsoDate(value?: string) {
@@ -248,10 +443,6 @@ function formatVoyageursLabel(
   }
 
   return parts.join(", ");
-}
-
-function totalGuests(voyageurs: VoyageursState) {
-  return voyageurs.adults + voyageurs.childrenAges.length + voyageurs.babiesAges.length;
 }
 
 function roomTypeCapacity(adults: number) {
@@ -366,7 +557,8 @@ function Nav({
                   <DropdownMenuItem
                     key={city}
                     className="cursor-pointer"
-                    onClick={() => {
+                    onSelect={(event) => {
+                      event.preventDefault();
                       onSelectDestination?.(city);
                     }}
                   >
@@ -576,6 +768,7 @@ function SearchBar({
   });
   const [destOpen, setDestOpen] = useState(false);
   const [voyageursOpen, setVoyageursOpen] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const destBoxRef = useRef<HTMLDivElement>(null);
 
   const dateRange: DateRange | undefined = useMemo(() => {
@@ -649,7 +842,7 @@ function SearchBar({
       const childrenAges = [...current.childrenAges];
 
       while (childrenAges.length < count) {
-        childrenAges.push(8);
+        childrenAges.push(-1);
       }
 
       return {
@@ -665,7 +858,7 @@ function SearchBar({
       const babiesAges = [...current.babiesAges];
 
       while (babiesAges.length < count) {
-        babiesAges.push(1);
+        babiesAges.push(-1);
       }
 
       return {
@@ -676,8 +869,38 @@ function SearchBar({
   };
 
   const handleSearch = () => {
+    const destination = dest.trim();
+
+    if (!destination) {
+      setSearchError(t.search.errorDestination);
+      setDestOpen(true);
+      return;
+    }
+
+    if (!dateArrivee || !dateDepart) {
+      setSearchError(t.search.errorDates);
+      setDatesOpen(true);
+      return;
+    }
+
+    if (voyageurs.adults < 1) {
+      setSearchError(t.search.errorTravelers);
+      setVoyageursOpen(true);
+      return;
+    }
+
+    const missingChildAge = voyageurs.childrenAges.some((age) => age < 0);
+    const missingBabyAge = voyageurs.babiesAges.some((age) => age < 0);
+
+    if (missingChildAge || missingBabyAge) {
+      setSearchError(t.search.errorAges);
+      setVoyageursOpen(true);
+      return;
+    }
+
+    setSearchError("");
     onSearch({
-      destination: dest.trim(),
+      destination,
       dateArrivee,
       dateDepart,
       voyageurs,
@@ -696,6 +919,7 @@ function SearchBar({
             onChange={(e) => {
               const value = e.target.value;
               setDest(value);
+              setSearchError("");
               setDestOpen(value.trim().length > 0);
             }}
             onFocus={() => {
@@ -764,8 +988,9 @@ function SearchBar({
               locale={calendarLocale}
               selected={dateRange}
               defaultMonth={dateRange?.from || new Date()}
-              disabled={{ before: new Date() }}
+              disabled={{ before: startOfLocalToday() }}
               onSelect={(range) => {
+                setSearchError("");
                 if (!range?.from) {
                   setDateArrivee("");
                   setDateDepart("");
@@ -842,12 +1067,13 @@ function SearchBar({
                     type="button"
                     className="grid h-8 w-8 place-items-center rounded-full border border-slate-200 disabled:opacity-40"
                     disabled={voyageurs.adults <= 1}
-                    onClick={() =>
+                    onClick={() => {
+                      setSearchError("");
                       setVoyageurs((current) => ({
                         ...current,
                         adults: Math.max(1, current.adults - 1),
-                      }))
-                    }
+                      }));
+                    }}
                   >
                     <Minus className="h-3.5 w-3.5" />
                   </button>
@@ -900,17 +1126,23 @@ function SearchBar({
                     {t.search.childAge} {index + 1}
                   </span>
                   <select
-                    value={age}
+                    value={age < 0 ? "" : age}
                     onChange={(e) => {
-                      const value = Number(e.target.value);
+                      const raw = e.target.value;
+                      const value = raw === "" ? -1 : Number(raw);
+                      setSearchError("");
                       setVoyageurs((current) => {
                         const childrenAges = [...current.childrenAges];
                         childrenAges[index] = value;
                         return { ...current, childrenAges };
                       });
                     }}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                    className={cn(
+                      "rounded-lg border bg-white px-2 py-1.5 text-sm",
+                      age < 0 ? "border-red-300 text-muted-foreground" : "border-slate-200"
+                    )}
                   >
+                    <option value="">{t.search.chooseAge}</option>
                     {Array.from({ length: 11 }, (_, i) => i + 2).map((option) => (
                       <option key={option} value={option}>
                         {t.search.years(option)}
@@ -953,17 +1185,23 @@ function SearchBar({
                     {t.search.babyAge} {index + 1}
                   </span>
                   <select
-                    value={age}
+                    value={age < 0 ? "" : age}
                     onChange={(e) => {
-                      const value = Number(e.target.value);
+                      const raw = e.target.value;
+                      const value = raw === "" ? -1 : Number(raw);
+                      setSearchError("");
                       setVoyageurs((current) => {
                         const babiesAges = [...current.babiesAges];
                         babiesAges[index] = value;
                         return { ...current, babiesAges };
                       });
                     }}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                    className={cn(
+                      "rounded-lg border bg-white px-2 py-1.5 text-sm",
+                      age < 0 ? "border-red-300 text-muted-foreground" : "border-slate-200"
+                    )}
                   >
+                    <option value="">{t.search.chooseAge}</option>
                     <option value={0}>{t.search.underOne}</option>
                     <option value={1}>{t.search.oneYear}</option>
                   </select>
@@ -994,6 +1232,11 @@ function SearchBar({
           </button>
         </div>
       </div>
+      {searchError ? (
+        <p className="px-4 pb-2 pt-1 text-left text-sm font-medium text-red-600 sm:px-5">
+          {searchError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1150,7 +1393,6 @@ function SearchResults({
     return null;
   }
 
-  const guests = totalGuests(criteria.voyageurs);
   const roomCapacity =
     Number(criteria.voyageurs.adults) > 0
       ? roomTypeCapacity(criteria.voyageurs.adults)
@@ -1281,18 +1523,12 @@ function SearchResults({
                           </p>
                         ) : null}
 
-                        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        <div className="mt-6 grid grid-cols-2 gap-3">
                           <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
                               <BedDouble className="h-3.5 w-3.5" /> {t.results.rooms}
                             </div>
                             <p className="mt-1.5 text-xl font-semibold">{maison.nb_chambres || "—"}</p>
-                          </div>
-                          <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
-                            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                              <Baby className="h-3.5 w-3.5" /> Groupe
-                            </div>
-                            <p className="mt-1.5 text-xl font-semibold">{guests}</p>
                           </div>
                           <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
@@ -1393,185 +1629,16 @@ function SearchResults({
         )}
       </div>
 
-      <Dialog
-        open={Boolean(detailsMaison)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailsMaison(null);
-          }
+      <MaisonDetailsDialog
+        maison={detailsMaison}
+        onClose={() => setDetailsMaison(null)}
+        priceHint={t.results.perNightRoom(roomTypeLabel)}
+        primaryLabel={t.results.book}
+        onPrimary={(maison) => {
+          setDetailsMaison(null);
+          onReserve(maison);
         }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl">
-          {detailsMaison ? (
-            <>
-              <div className="relative h-48 w-full overflow-hidden sm:h-56">
-                <img
-                  src={resolvePhotoUrl(detailsMaison.photo_principale) || house1}
-                  alt={detailsMaison.nom}
-                  className="h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-5 text-white">
-                  <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/80">
-                    <MapPin className="h-3.5 w-3.5" />
-                    {[detailsMaison.quartier, detailsMaison.ville, detailsMaison.pays]
-                      .filter(Boolean)
-                      .join(" · ") || "Maroc"}
-                  </p>
-                  <DialogHeader className="mt-1 space-y-0 p-0 text-left">
-                    <DialogTitle className="text-2xl text-white sm:text-3xl">
-                      {detailsMaison.nom}
-                    </DialogTitle>
-                    <DialogDescription className="sr-only">
-                      Détails de {detailsMaison.nom}
-                    </DialogDescription>
-                  </DialogHeader>
-                </div>
-              </div>
-
-              <div className="space-y-5 p-5 sm:p-6">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {detailsMaison.description?.trim() || t.results.defaultDescription}
-                </p>
-
-                {detailsMaison.adresse ? (
-                  <p className="text-sm text-foreground/70">
-                    <span className="font-medium text-foreground">Adresse · </span>
-                    {detailsMaison.adresse}
-                    {detailsMaison.code_postal ? `, ${detailsMaison.code_postal}` : ""}
-                    {detailsMaison.ville ? ` · ${detailsMaison.ville}` : ""}
-                  </p>
-                ) : null}
-
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                      {t.results.rooms}
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {detailsMaison.nb_chambres || "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                      Check-in
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {(detailsMaison.heure_checkin || "14:00").slice(0, 5)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                      Check-out
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {(detailsMaison.heure_checkout || "12:00").slice(0, 5)}
-                    </p>
-                  </div>
-                </div>
-
-                {(detailsMaison.services || []).length > 0 ? (
-                  <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
-                      Services
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {detailsMaison.services!.map((item) => (
-                        <span
-                          key={`svc-${item}`}
-                          className="rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {(detailsMaison.equipements || []).length > 0 ? (
-                  <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-foreground/45">
-                      Équipements
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {detailsMaison.equipements!.map((item) => (
-                        <span
-                          key={`eq-${item}`}
-                          className="rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-foreground/70">
-                  {detailsMaison.telephone ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Phone className="h-4 w-4" /> {detailsMaison.telephone}
-                    </span>
-                  ) : null}
-                  {detailsMaison.whatsapp ? (
-                    <span>WhatsApp {detailsMaison.whatsapp}</span>
-                  ) : null}
-                  {detailsMaison.email ? <span>{detailsMaison.email}</span> : null}
-                  <span className="inline-flex items-center gap-1.5">
-                    <BadgeCheck
-                      className="h-4 w-4"
-                      style={{ color: "var(--olive-deep)" }}
-                    />
-                    {t.results.verified}
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-black/5 bg-[#fbf8f3] px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {t.results.pricingFrom} · {roomTypeLabel}
-                  </p>
-                  <p className="mt-0.5 text-xl font-semibold" style={{ color: "var(--ink)" }}>
-                    {detailsMaison.prix_adulte_min != null &&
-                    Number(detailsMaison.prix_adulte_min) > 0
-                      ? formatMoney(
-                          Number(detailsMaison.prix_adulte_min),
-                          currency,
-                          isAppCurrency(detailsMaison.devise)
-                            ? detailsMaison.devise
-                            : "MAD"
-                        )
-                      : currencyLabel(currency)}
-                    <span className="ml-2 text-sm font-normal text-muted-foreground">
-                      {t.results.perNightRoom(roomTypeLabel)}
-                    </span>
-                  </p>
-                </div>
-
-                <DialogFooter className="gap-2 sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setDetailsMaison(null)}
-                    className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:bg-[#f7f2ea]"
-                  >
-                    Fermer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const maison = detailsMaison;
-                      setDetailsMaison(null);
-                      onReserve(maison);
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold transition"
-                    style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
-                  >
-                    {t.results.book} <ArrowUpRight className="h-3.5 w-3.5" />
-                  </button>
-                </DialogFooter>
-              </div>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      />
     </section>
   );
 }
@@ -1648,10 +1715,17 @@ function Destinations({
   );
 }
 
-function Houses({ maisons }: { maisons: MaisonListItem[] }) {
+function Houses({
+  maisons,
+  onSelectDestination,
+}: {
+  maisons: MaisonListItem[];
+  onSelectDestination: (ville: string) => void;
+}) {
   const { currency } = useCurrency();
   const { t } = useLanguage();
   const featured = maisons.slice(0, 6);
+  const [detailsMaison, setDetailsMaison] = useState<MaisonListItem | null>(null);
 
   return (
     <section id="maisons" className="relative py-24 lg:py-32" style={{ background: "color-mix(in oklab, var(--sand) 55%, var(--cream))" }}>
@@ -1739,13 +1813,14 @@ function Houses({ maisons }: { maisons: MaisonListItem[] }) {
                           </span>
                         )}
                       </div>
-                      <a
-                        href="#resultats-recherche"
+                      <button
+                        type="button"
+                        onClick={() => setDetailsMaison(maison)}
                         className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition"
                         style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
                       >
                         {t.houses.view} <ArrowUpRight className="h-3.5 w-3.5" />
-                      </a>
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -1754,6 +1829,21 @@ function Houses({ maisons }: { maisons: MaisonListItem[] }) {
           </div>
         )}
       </div>
+
+      <MaisonDetailsDialog
+        maison={detailsMaison}
+        onClose={() => setDetailsMaison(null)}
+        priceHint={t.houses.perNightAdult}
+        primaryLabel={t.houses.seeAvailabilities}
+        onPrimary={(maison) => {
+          setDetailsMaison(null);
+          const ville = maison.ville?.trim();
+
+          if (ville) {
+            onSelectDestination(ville);
+          }
+        }}
+      />
     </section>
   );
 }
@@ -2429,7 +2519,10 @@ function Landing() {
     });
   };
 
-  const handleSearch = async (next: SearchCriteria) => {
+  const handleSearch = async (
+    next: SearchCriteria,
+    options?: { browseDestination?: boolean }
+  ) => {
     setCriteria(next);
     setSearching(true);
     setResults([]);
@@ -2442,33 +2535,38 @@ function Landing() {
     }, 40);
 
     try {
-      const [catalog] = await Promise.all([
-        fetchMaisonsCatalog(next.destination || undefined, {
-          adults: next.voyageurs.adults,
-        }),
-        new Promise((resolve) => window.setTimeout(resolve, 900)),
-      ]);
+      const catalog = await fetchMaisonsCatalog(next.destination || undefined, {
+        adults: options?.browseDestination ? undefined : next.voyageurs.adults,
+      });
 
       const query = next.destination.trim().toLowerCase();
 
-      const filtered = catalog.filter((maison) => {
-        if (!query) {
-          return true;
-        }
+      const filtered = !query
+        ? catalog
+        : catalog.filter((maison) => {
+            const ville = (maison.ville || "").trim().toLowerCase();
 
-        const haystack = [
-          maison.nom,
-          maison.ville,
-          maison.quartier,
-          maison.adresse,
-          maison.categorie,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
+            if (options?.browseDestination) {
+              return (
+                ville === query ||
+                ville.includes(query) ||
+                query.includes(ville)
+              );
+            }
 
-        return haystack.includes(query);
-      });
+            const haystack = [
+              maison.nom,
+              maison.ville,
+              maison.quartier,
+              maison.adresse,
+              maison.categorie,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+            return haystack.includes(query);
+          });
 
       setResults(filtered);
     } catch {
@@ -2479,16 +2577,19 @@ function Landing() {
   };
 
   const handleSelectDestination = (ville: string) => {
-    void handleSearch({
-      destination: ville,
-      dateArrivee: criteria?.dateArrivee || "",
-      dateDepart: criteria?.dateDepart || "",
-      voyageurs: criteria?.voyageurs || {
-        adults: 2,
-        childrenAges: [],
-        babiesAges: [],
+    void handleSearch(
+      {
+        destination: ville,
+        dateArrivee: criteria?.dateArrivee || "",
+        dateDepart: criteria?.dateDepart || "",
+        voyageurs: criteria?.voyageurs || {
+          adults: 2,
+          childrenAges: [],
+          babiesAges: [],
+        },
       },
-    });
+      { browseDestination: true }
+    );
   };
 
   return (
@@ -2507,7 +2608,7 @@ function Landing() {
             onReserve={handleReserve}
           />
           <Destinations maisons={maisons} onSelectDestination={handleSelectDestination} />
-          <Houses maisons={maisons} />
+          <Houses maisons={maisons} onSelectDestination={handleSelectDestination} />
           <Advantages />
           <Testimonials />
           <AvisForm maisons={maisons} />

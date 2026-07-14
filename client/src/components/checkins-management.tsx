@@ -5,7 +5,6 @@ import {
   LogOut,
   MoreVertical,
   Pencil,
-  Plus,
   Search,
   Trash2,
 } from "lucide-react";
@@ -119,12 +118,94 @@ type FormState = {
 
 type FormMode = "create" | "edit" | "checkout";
 
+type DayRow = {
+  reservation: Reservation;
+  checkin: CheckinCheckout | null;
+};
+
+function todayIsoLocal() {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function toDateOnly(value?: string | Date | null) {
+  if (!value) {
+    return "";
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return "";
+    }
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+
+  const raw = String(value).trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");
+  const date = new Date(normalized);
+
+  if (Number.isNaN(date.getTime())) {
+    return raw.slice(0, 10);
+  }
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function formatDayLabel(isoDate: string) {
+  const date = new Date(`${isoDate}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return isoDate;
+  }
+
+  return date.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatShortDate(value?: string | null) {
+  const iso = toDateOnly(value);
+
+  if (!iso) {
+    return "—";
+  }
+
+  const date = new Date(`${iso}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+
+  return date.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function toDateTimeLocal(value?: string | null) {
   if (!value) {
     return "";
   }
 
   const raw = String(value).trim();
+
   if (!raw) {
     return "";
   }
@@ -160,6 +241,7 @@ function formatDateDisplay(value?: string | null) {
 
 function formatMoney(value?: number | string | null) {
   const number = Number(value);
+
   if (!Number.isFinite(number)) {
     return "—";
   }
@@ -170,9 +252,9 @@ function formatMoney(value?: number | string | null) {
   })} MAD`;
 }
 
-function emptyForm(staffName = ""): FormState {
+function emptyForm(staffName = "", reservationId = ""): FormState {
   return {
-    reservation_id: "",
+    reservation_id: reservationId,
     date_checkin_reel: nowDateTimeLocal(),
     date_checkout_reel: "",
     checkin_par: staffName,
@@ -196,9 +278,7 @@ function recordToForm(record: CheckinCheckout, mode: FormMode, staffName = ""): 
         : toDateTimeLocal(record.date_checkout_reel),
     checkin_par: record.checkin_par || "",
     checkout_par:
-      mode === "checkout" && !record.checkout_par
-        ? staffName
-        : record.checkout_par || "",
+      mode === "checkout" && !record.checkout_par ? staffName : record.checkout_par || "",
     etat_chambre_checkin: record.etat_chambre_checkin || "",
     etat_chambre_checkout:
       mode === "checkout" && !record.etat_chambre_checkout
@@ -228,22 +308,44 @@ function formToPayload(form: FormState): CheckinCheckoutFormData {
   };
 }
 
+function matchesSearch(row: DayRow, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  const haystack = [
+    row.reservation.reference,
+    row.reservation.client_nom,
+    row.reservation.maison_nom,
+    row.reservation.chambre_nom,
+    row.checkin?.checkin_par,
+    row.checkin?.checkout_par,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(query);
+}
+
 export function CheckinsManagement() {
   const [records, setRecords] = useState<CheckinCheckout[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CheckinFlowStatus | "all">("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [form, setForm] = useState<FormState>(() => emptyForm());
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<CheckinCheckout | null>(null);
+  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CheckinCheckout | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [staffName, setStaffName] = useState("");
+
+  const today = useMemo(() => todayIsoLocal(), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -257,7 +359,9 @@ export function CheckinsManagement() {
       setRecords(checkinsData);
       setReservations(
         reservationsData.filter(
-          (item) => item.statut_reservation === "confirmee" || item.statut_reservation === "terminee"
+          (item) =>
+            item.statut_reservation !== "annulee" &&
+            item.statut_reservation !== "no_show"
         )
       );
     } catch (err) {
@@ -286,6 +390,7 @@ export function CheckinsManagement() {
         }
 
         const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+
         if (name) {
           setStaffName(name);
         }
@@ -299,77 +404,86 @@ export function CheckinsManagement() {
     };
   }, []);
 
-  const usedReservationIds = useMemo(
-    () => new Set(records.map((item) => item.reservation_id)),
-    [records]
-  );
+  const checkinByReservationId = useMemo(() => {
+    const map = new Map<number, CheckinCheckout>();
 
-  const availableReservations = useMemo(() => {
-    return reservations.filter((reservation) => {
-      if (editing && reservation.id === editing.reservation_id) {
-        return true;
-      }
+    for (const record of records) {
+      map.set(record.reservation_id, record);
+    }
 
-      return (
-        reservation.statut_reservation === "confirmee" &&
-        !usedReservationIds.has(reservation.id)
-      );
-    });
-  }, [reservations, usedReservationIds, editing]);
+    return map;
+  }, [records]);
 
-  const filteredRecords = useMemo(() => {
+  const arriveesDuJour = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return records.filter((record) => {
-      const status = getCheckinFlowStatus(record);
+    return reservations
+      .filter((reservation) => toDateOnly(reservation.date_arrivee) === today)
+      .map((reservation) => ({
+        reservation,
+        checkin: checkinByReservationId.get(reservation.id) || null,
+      }))
+      .filter((row) => matchesSearch(row, query))
+      .sort((a, b) => a.reservation.reference.localeCompare(b.reservation.reference));
+  }, [reservations, checkinByReservationId, today, search]);
 
-      if (statusFilter !== "all" && status !== statusFilter) {
-        return false;
-      }
+  const departsDuJour = useMemo(() => {
+    const query = search.trim().toLowerCase();
 
-      if (!query) {
-        return true;
-      }
+    return reservations
+      .filter((reservation) => toDateOnly(reservation.date_depart) === today)
+      .map((reservation) => ({
+        reservation,
+        checkin: checkinByReservationId.get(reservation.id) || null,
+      }))
+      .filter((row) => matchesSearch(row, query))
+      .sort((a, b) => a.reservation.reference.localeCompare(b.reservation.reference));
+  }, [reservations, checkinByReservationId, today, search]);
 
-      const haystack = [
-        record.reservation_reference,
-        record.client_nom,
-        record.maison_nom,
-        record.chambre_nom,
-        record.checkin_par,
-        record.checkout_par,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+  const openCheckinDialog = (reservation: Reservation) => {
+    const existing = checkinByReservationId.get(reservation.id) || null;
 
-      return haystack.includes(query);
-    });
-  }, [records, search, statusFilter]);
+    setSelectedReservation(reservation);
+    setFormError("");
 
-  const openCreateDialog = () => {
-    setFormMode("create");
-    setEditing(null);
-    setForm(emptyForm(staffName));
+    if (existing) {
+      setFormMode("edit");
+      setEditing(existing);
+      setForm(recordToForm(existing, "edit", staffName));
+    } else {
+      setFormMode("create");
+      setEditing(null);
+      setForm(emptyForm(staffName, String(reservation.id)));
+    }
+
+    setDialogOpen(true);
+  };
+
+  const openCheckoutDialog = (reservation: Reservation, record: CheckinCheckout) => {
+    setSelectedReservation(reservation);
+    setFormMode("checkout");
+    setEditing(record);
+    setForm(recordToForm(record, "checkout", staffName));
     setFormError("");
     setDialogOpen(true);
   };
 
-  const openEditDialog = (record: CheckinCheckout, mode: FormMode = "edit") => {
-    setFormMode(mode);
+  const openEditDialog = (reservation: Reservation, record: CheckinCheckout) => {
+    setSelectedReservation(reservation);
+    setFormMode("edit");
     setEditing(record);
-    setForm(recordToForm(record, mode, staffName));
+    setForm(recordToForm(record, "edit", staffName));
     setFormError("");
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     if (!form.reservation_id) {
-      setFormError("Sélectionnez une réservation.");
+      setFormError("Réservation introuvable.");
       return;
     }
 
-    if (formMode === "create" && !form.date_checkin_reel) {
+    if ((formMode === "create" || formMode === "edit") && !form.date_checkin_reel) {
       setFormError("La date de check-in est requise.");
       return;
     }
@@ -421,26 +535,207 @@ export function CheckinsManagement() {
 
   const dialogTitle =
     formMode === "create"
-      ? "Nouveau check-in"
+      ? `Check-in · ${selectedReservation?.reference || ""}`
       : formMode === "checkout"
-        ? `Check-out · ${editing?.reservation_reference || ""}`
-        : `Modifier · ${editing?.reservation_reference || ""}`;
+        ? `Check-out · ${selectedReservation?.reference || editing?.reservation_reference || ""}`
+        : `Modifier · ${selectedReservation?.reference || editing?.reservation_reference || ""}`;
+
+  const renderArriveeActions = (row: DayRow) => {
+    const status = row.checkin
+      ? getCheckinFlowStatus(row.checkin)
+      : ("attente_checkin" as const);
+
+    if (!row.checkin) {
+      return (
+        <Button size="sm" onClick={() => openCheckinDialog(row.reservation)}>
+          <LogIn className="mr-1.5 h-3.5 w-3.5" />
+          Faire le check-in
+        </Button>
+      );
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => openEditDialog(row.reservation, row.checkin!)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Modifier
+          </DropdownMenuItem>
+          {status === "en_sejour" ? (
+            <DropdownMenuItem
+              onClick={() => openCheckoutDialog(row.reservation, row.checkin!)}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Faire le check-out
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-red-600"
+            onClick={() => setDeleteTarget(row.checkin)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Supprimer
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  const renderDepartActions = (row: DayRow) => {
+    const status = row.checkin
+      ? getCheckinFlowStatus(row.checkin)
+      : ("attente_checkin" as const);
+
+    if (!row.checkin || status === "attente_checkin") {
+      return (
+        <Button size="sm" variant="outline" onClick={() => openCheckinDialog(row.reservation)}>
+          <LogIn className="mr-1.5 h-3.5 w-3.5" />
+          Check-in d’abord
+        </Button>
+      );
+    }
+
+    if (status === "en_sejour") {
+      return (
+        <Button size="sm" onClick={() => openCheckoutDialog(row.reservation, row.checkin!)}>
+          <LogOut className="mr-1.5 h-3.5 w-3.5" />
+          Faire le check-out
+        </Button>
+      );
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => openEditDialog(row.reservation, row.checkin!)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Modifier
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-red-600"
+            onClick={() => setDeleteTarget(row.checkin)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Supprimer
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
+  const renderDayTable = (
+    rows: DayRow[],
+    kind: "arrivee" | "depart",
+    emptyLabel: string
+  ) => (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Réservation</TableHead>
+            <TableHead>Client</TableHead>
+            <TableHead>Chambre</TableHead>
+            <TableHead>{kind === "arrivee" ? "Arrivée prévue" : "Départ prévu"}</TableHead>
+            <TableHead>Check-in / out</TableHead>
+            <TableHead>Statut</TableHead>
+            <TableHead className="w-[160px]" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loading ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                Chargement...
+              </TableCell>
+            </TableRow>
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                {emptyLabel}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((row) => {
+              const status = row.checkin
+                ? getCheckinFlowStatus(row.checkin)
+                : ("attente_checkin" as const);
+
+              return (
+                <TableRow key={`${kind}-${row.reservation.id}`}>
+                  <TableCell>
+                    <div className="font-medium">{row.reservation.reference}</div>
+                    <div className="text-xs text-slate-500">
+                      {row.reservation.maison_nom || "—"}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="font-medium">
+                      {row.reservation.client_nom?.trim() || "—"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {row.reservation.client_email || "—"}
+                    </div>
+                  </TableCell>
+                  <TableCell>{row.reservation.chambre_nom || "—"}</TableCell>
+                  <TableCell>
+                    {kind === "arrivee"
+                      ? formatShortDate(row.reservation.date_arrivee)
+                      : formatShortDate(row.reservation.date_depart)}
+                    <div className="text-xs text-slate-500">
+                      {kind === "arrivee"
+                        ? `Départ ${formatShortDate(row.reservation.date_depart)}`
+                        : `Arrivée ${formatShortDate(row.reservation.date_arrivee)}`}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      In · {formatDateDisplay(row.checkin?.date_checkin_reel)}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Out · {formatDateDisplay(row.checkin?.date_checkout_reel)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={FLOW_VARIANTS[status]}>{FLOW_LABELS[status]}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {kind === "arrivee"
+                      ? renderArriveeActions(row)
+                      : renderDepartActions(row)}
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Check-in / Check-out
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Enregistrez l&apos;accueil, l&apos;état des chambres et le dépôt de garantie.
-          </p>
-        </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nouveau check-in
-        </Button>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Check-in / Check-out
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Arrivées et départs du jour extraits des réservations confirmées ·{" "}
+          <span className="font-medium capitalize text-slate-700">
+            {formatDayLabel(today)}
+          </span>
+        </p>
       </div>
 
       {error ? (
@@ -449,8 +744,8 @@ export function CheckinsManagement() {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row">
-        <div className="relative flex-1">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             className="pl-9"
@@ -459,121 +754,33 @@ export function CheckinsManagement() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(value) => setStatusFilter(value as CheckinFlowStatus | "all")}
-        >
-          <SelectTrigger className="w-full sm:w-[220px]">
-            <SelectValue placeholder="Statut" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les statuts</SelectItem>
-            {(Object.keys(FLOW_LABELS) as CheckinFlowStatus[]).map((status) => (
-              <SelectItem key={status} value={status}>
-                {FLOW_LABELS[status]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Réservation</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Chambre</TableHead>
-              <TableHead>Check-in</TableHead>
-              <TableHead>Check-out</TableHead>
-              <TableHead>Dépôt</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-slate-500">
-                  Chargement...
-                </TableCell>
-              </TableRow>
-            ) : filteredRecords.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-slate-500">
-                  Aucun check-in / check-out trouvé.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredRecords.map((record) => {
-                const status = getCheckinFlowStatus(record);
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <LogIn className="h-5 w-5" style={{ color: "var(--olive-deep)" }} />
+            Arrivées du jour
+          </h2>
+          <Badge variant="secondary">{arriveesDuJour.length}</Badge>
+        </div>
+        {renderDayTable(
+          arriveesDuJour,
+          "arrivee",
+          "Aucune arrivée prévue aujourd’hui."
+        )}
+      </section>
 
-                return (
-                  <TableRow key={record.id}>
-                    <TableCell>
-                      <div className="font-medium">{record.reservation_reference}</div>
-                      <div className="text-xs text-slate-500">{record.maison_nom}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">{record.client_nom || "—"}</div>
-                      <div className="text-xs text-slate-500">{record.client_telephone || "—"}</div>
-                    </TableCell>
-                    <TableCell>{record.chambre_nom || "—"}</TableCell>
-                    <TableCell>
-                      <div>{formatDateDisplay(record.date_checkin_reel)}</div>
-                      <div className="text-xs text-slate-500">{record.checkin_par || "—"}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div>{formatDateDisplay(record.date_checkout_reel)}</div>
-                      <div className="text-xs text-slate-500">{record.checkout_par || "—"}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div>{formatMoney(record.depot_garantie_montant)}</div>
-                      <div className="text-xs text-slate-500">
-                        {DEPOT_LABELS[record.depot_garantie_statut]}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={FLOW_VARIANTS[status]}>{FLOW_LABELS[status]}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => openEditDialog(record, "edit")}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Modifier
-                          </DropdownMenuItem>
-                          {status === "en_sejour" ? (
-                            <DropdownMenuItem
-                              onClick={() => openEditDialog(record, "checkout")}
-                            >
-                              <LogOut className="mr-2 h-4 w-4" />
-                              Faire le check-out
-                            </DropdownMenuItem>
-                          ) : null}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={() => setDeleteTarget(record)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <LogOut className="h-5 w-5" style={{ color: "var(--terracotta)" }} />
+            Départs du jour
+          </h2>
+          <Badge variant="secondary">{departsDuJour.length}</Badge>
+        </div>
+        {renderDayTable(departsDuJour, "depart", "Aucun départ prévu aujourd’hui.")}
+      </section>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
@@ -585,30 +792,21 @@ export function CheckinsManagement() {
           </DialogHeader>
 
           <div className="space-y-6">
-            <section className="space-y-4">
-              <h3 className="text-sm font-semibold text-slate-800">Réservation</h3>
-              <div className="space-y-2">
-                <Label>Réservation *</Label>
-                <Select
-                  value={form.reservation_id || undefined}
-                  onValueChange={(value) =>
-                    setForm((current) => ({ ...current, reservation_id: value }))
-                  }
-                  disabled={formMode !== "create"}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner une réservation confirmée" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableReservations.map((reservation) => (
-                      <SelectItem key={reservation.id} value={String(reservation.id)}>
-                        {reservation.reference} · {reservation.client_nom?.trim() || "Client"} ·{" "}
-                        {reservation.chambre_nom}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <section className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <p className="font-medium text-slate-900">
+                {selectedReservation?.reference || editing?.reservation_reference || "—"}
+              </p>
+              <p className="mt-1 text-slate-600">
+                {selectedReservation?.client_nom?.trim() || editing?.client_nom || "—"}
+                {" · "}
+                {selectedReservation?.chambre_nom || editing?.chambre_nom || "—"}
+                {" · "}
+                {selectedReservation?.maison_nom || editing?.maison_nom || "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Séjour {formatShortDate(selectedReservation?.date_arrivee)} →{" "}
+                {formatShortDate(selectedReservation?.date_depart)}
+              </p>
             </section>
 
             <section className="space-y-4">
@@ -628,6 +826,7 @@ export function CheckinsManagement() {
                         date_checkin_reel: event.target.value,
                       }))
                     }
+                    disabled={formMode === "checkout"}
                   />
                 </div>
                 <div className="space-y-2">
@@ -641,6 +840,7 @@ export function CheckinsManagement() {
                       }))
                     }
                     placeholder="Nom de l'employé"
+                    disabled={formMode === "checkout"}
                   />
                 </div>
                 <div className="space-y-2">
@@ -653,6 +853,7 @@ export function CheckinsManagement() {
                         etat_chambre_checkin: value === "none" ? "" : value,
                       }))
                     }
+                    disabled={formMode === "checkout"}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner" />
@@ -680,6 +881,7 @@ export function CheckinsManagement() {
                         notes_checkin: event.target.value,
                       }))
                     }
+                    disabled={formMode === "checkout"}
                   />
                 </div>
               </div>
