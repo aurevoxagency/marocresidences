@@ -71,7 +71,11 @@ import {
   type Facture,
 } from "@/lib/factures";
 import { fetchSupplementTarifs } from "@/lib/hebergement";
-import { fetchReservations, type Reservation } from "@/lib/reservations";
+import { fetchReservation, fetchReservations, type Reservation } from "@/lib/reservations";
+import {
+  buildDocumentLinesFromReservation,
+  buildNotesFromReservation,
+} from "@/lib/reservation-document-items";
 
 const STATUT_LABELS: Record<CommandeStatut, string> = {
   en_attente: "En attente",
@@ -142,6 +146,22 @@ function emptyItem(): ItemDraft {
     quantite: "1",
     prix_unitaire: "",
   };
+}
+
+function buildItemsFromReservation(reservation: Reservation): ItemDraft[] {
+  const lines = buildDocumentLinesFromReservation(reservation);
+
+  if (lines.length === 0) {
+    return [emptyItem()];
+  }
+
+  return lines.map((line) => ({
+    key: crypto.randomUUID(),
+    supplement_id: line.supplement_id ? String(line.supplement_id) : "",
+    description: line.description,
+    quantite: String(line.quantite),
+    prix_unitaire: String(line.prix_unitaire),
+  }));
 }
 
 function buildDefaultForm(): FormState {
@@ -262,6 +282,7 @@ export function CommandesManagement() {
   const [saving, setSaving] = useState(false);
   const [loadingEditForm, setLoadingEditForm] = useState(false);
   const [importingDevis, setImportingDevis] = useState(false);
+  const [importingReservation, setImportingReservation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState<CommandeStatut | "all">("all");
@@ -460,15 +481,47 @@ export function CommandesManagement() {
     }
   };
 
-  const handleReservationChange = (reservationId: string) => {
-    const reservation = reservations.find((item) => String(item.id) === reservationId);
+  const handleReservationChange = async (reservationId: string) => {
+    if (!reservationId) {
+      setForm((current) => ({ ...current, reservation_id: "" }));
+      return;
+    }
 
-    setForm((current) => ({
-      ...current,
-      reservation_id: reservationId,
-      client_id: reservation ? String(reservation.client_id) : "",
-      maison_id: reservation ? String(reservation.maison_id) : "",
-    }));
+    setImportingReservation(true);
+    setError(null);
+
+    try {
+      const reservation = await fetchReservation(Number(reservationId));
+
+      setReservations((current) => {
+        const exists = current.some((item) => item.id === reservation.id);
+        if (exists) {
+          return current.map((item) => (item.id === reservation.id ? reservation : item));
+        }
+        return [...current, reservation];
+      });
+
+      setForm((current) => ({
+        ...current,
+        devis_id: "",
+        reservation_id: String(reservation.id),
+        client_id: String(reservation.client_id),
+        maison_id: String(reservation.maison_id),
+        taux_tva: String(
+          reservation.taux_tva_applique ?? (current.taux_tva || 10)
+        ),
+        notes: buildNotesFromReservation(reservation, current.notes),
+        items: buildItemsFromReservation(reservation),
+      }));
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Impossible d'importer la réservation."
+      );
+    } finally {
+      setImportingReservation(false);
+    }
   };
 
   const updateItem = (key: string, patch: Partial<ItemDraft>) => {
@@ -773,9 +826,19 @@ export function CommandesManagement() {
             <section className="grid gap-4 rounded-xl border border-slate-200 p-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <Label>Réservation</Label>
-                <Select value={form.reservation_id} onValueChange={handleReservationChange}>
+                <Select
+                  value={form.reservation_id}
+                  onValueChange={(value) => void handleReservationChange(value)}
+                  disabled={importingReservation}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner une réservation" />
+                    <SelectValue
+                      placeholder={
+                        importingReservation
+                          ? "Import de la réservation…"
+                          : "Sélectionner une réservation"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {form.reservation_id &&
@@ -793,6 +856,16 @@ export function CommandesManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+                {importingReservation ? (
+                  <p className="text-xs text-slate-500">
+                    Import des informations, chambre, prix et lignes en cours…
+                  </p>
+                ) : form.reservation_id && !form.devis_id ? (
+                  <p className="text-xs text-slate-500">
+                    Client, maison, TVA et lignes de commande sont importés depuis la réservation
+                    {selectedReservation ? ` ${selectedReservation.reference}` : ""}.
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -1027,7 +1100,7 @@ export function CommandesManagement() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={() => void handleSave()} disabled={saving || loadingEditForm || importingDevis}>
+            <Button onClick={() => void handleSave()} disabled={saving || loadingEditForm || importingDevis || importingReservation}>
               {saving ? "Enregistrement..." : editingCommande ? "Mettre à jour" : "Créer la commande"}
             </Button>
           </DialogFooter>

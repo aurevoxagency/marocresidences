@@ -84,8 +84,12 @@ import { fetchChambres, fetchSaisons, fetchSupplementTarifs, type ChambreListIte
 import { fetchMaisons, type MaisonListItem } from "@/lib/maisons";
 import { fetchPromotions, type Promotion } from "@/lib/promotions";
 import { fetchProspects, type Prospect } from "@/lib/prospects";
-import { fetchReservations, type Reservation } from "@/lib/reservations";
+import { fetchReservation, fetchReservations, type Reservation } from "@/lib/reservations";
 import type { ReservationTypeReduction } from "@/lib/reservations";
+import {
+  buildDocumentLinesFromReservation,
+  buildNotesFromReservation,
+} from "@/lib/reservation-document-items";
 
 const STATUT_LABELS: Record<DevisStatut, string> = {
   brouillon: "Brouillon",
@@ -195,6 +199,25 @@ function emptyItem(): ItemDraft {
     quantite: "1",
     prix_unitaire: "",
   };
+}
+
+function buildItemsFromReservation(reservation: Reservation): ItemDraft[] {
+  const lines = buildDocumentLinesFromReservation(reservation);
+
+  if (lines.length === 0) {
+    return [emptyItem()];
+  }
+
+  return lines.map((line) => ({
+    key: crypto.randomUUID(),
+    type_item: line.type_item,
+    chambre_id: line.chambre_id ? String(line.chambre_id) : "",
+    tranche_age_id: line.tranche_age_id ? String(line.tranche_age_id) : "",
+    supplement_id: line.supplement_id ? String(line.supplement_id) : "",
+    description: line.description,
+    quantite: String(line.quantite),
+    prix_unitaire: String(line.prix_unitaire),
+  }));
 }
 
 function buildDefaultForm(): FormState {
@@ -342,6 +365,7 @@ export function DevisManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDevis, setEditingDevis] = useState<Devis | null>(null);
   const [loadingEditForm, setLoadingEditForm] = useState(false);
+  const [importingReservation, setImportingReservation] = useState(false);
   const [form, setForm] = useState<FormState>(buildDefaultForm);
   const [deleteTarget, setDeleteTarget] = useState<Devis | null>(null);
   const [convertTarget, setConvertTarget] = useState<Devis | null>(null);
@@ -538,36 +562,55 @@ export function DevisManagement() {
     }
   };
 
-  const handleReservationChange = (reservationId: string) => {
+  const handleReservationChange = async (reservationId: string) => {
     if (!reservationId || reservationId === "none") {
       setForm((current) => ({ ...current, reservation_id: "" }));
       return;
     }
 
-    const reservation = reservations.find((item) => String(item.id) === reservationId);
+    setImportingReservation(true);
+    setError(null);
 
-    if (!reservation) {
-      return;
+    try {
+      const reservation = await fetchReservation(Number(reservationId));
+
+      setReservations((current) => {
+        const exists = current.some((item) => item.id === reservation.id);
+        if (exists) {
+          return current.map((item) => (item.id === reservation.id ? reservation : item));
+        }
+        return [...current, reservation];
+      });
+
+      setForm((current) => ({
+        ...current,
+        reservation_id: String(reservation.id),
+        destinataire_type: "client",
+        client_id: String(reservation.client_id),
+        prospect_id: "",
+        maison_id: String(reservation.maison_id),
+        chambre_id: String(reservation.chambre_id),
+        date_arrivee: dateInput(reservation.date_arrivee),
+        date_depart: dateInput(reservation.date_depart),
+        nb_adultes: String(reservation.nb_adultes ?? 1),
+        nbrs_enfants: String(reservation.nbrs_enfants ?? 0),
+        nbrs_bebe: String(reservation.nbrs_bebe ?? 0),
+        promotion_id: reservation.promotion_id ? String(reservation.promotion_id) : "",
+        type_reduction: reservation.type_reduction || "",
+        valeur_reduction: String(reservation.valeur_reduction ?? 0),
+        taux_tva: String(reservation.taux_tva_applique ?? 10),
+        notes: buildNotesFromReservation(reservation, current.notes),
+        items: buildItemsFromReservation(reservation),
+      }));
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Impossible d'importer la réservation."
+      );
+    } finally {
+      setImportingReservation(false);
     }
-
-    setForm((current) => ({
-      ...current,
-      reservation_id: reservationId,
-      destinataire_type: "client",
-      client_id: String(reservation.client_id),
-      prospect_id: "",
-      maison_id: String(reservation.maison_id),
-      chambre_id: String(reservation.chambre_id),
-      date_arrivee: dateInput(reservation.date_arrivee),
-      date_depart: dateInput(reservation.date_depart),
-      nb_adultes: String(reservation.nb_adultes ?? 1),
-      nbrs_enfants: String(reservation.nbrs_enfants ?? 0),
-      nbrs_bebe: String(reservation.nbrs_bebe ?? 0),
-      promotion_id: reservation.promotion_id ? String(reservation.promotion_id) : "",
-      type_reduction: reservation.type_reduction || "",
-      valeur_reduction: String(reservation.valeur_reduction ?? 0),
-      taux_tva: String(reservation.taux_tva_applique ?? 10),
-    }));
   };
 
   const updateItem = (key: string, patch: Partial<ItemDraft>) => {
@@ -901,10 +944,17 @@ export function DevisManagement() {
                 <Label>Réservation liée (optionnelle)</Label>
                 <Select
                   value={form.reservation_id || "none"}
-                  onValueChange={handleReservationChange}
+                  onValueChange={(value) => void handleReservationChange(value)}
+                  disabled={importingReservation}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Aucune réservation" />
+                    <SelectValue
+                      placeholder={
+                        importingReservation
+                          ? "Import de la réservation…"
+                          : "Aucune réservation"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Aucune</SelectItem>
@@ -921,10 +971,15 @@ export function DevisManagement() {
                     ))}
                   </SelectContent>
                 </Select>
-                {form.reservation_id ? (
+                {importingReservation ? (
                   <p className="text-xs text-slate-500">
-                    Les informations client, maison, chambre et dates sont préremplies depuis la
-                    réservation{selectedReservation ? ` ${selectedReservation.reference}` : ""}.
+                    Import des informations, chambre, prix et lignes en cours…
+                  </p>
+                ) : form.reservation_id ? (
+                  <p className="text-xs text-slate-500">
+                    Client, maison, chambre, dates, occupants, tarifs, réduction, TVA et lignes
+                    du devis sont importés depuis la réservation
+                    {selectedReservation ? ` ${selectedReservation.reference}` : ""}.
                   </p>
                 ) : null}
               </div>
@@ -1379,7 +1434,10 @@ export function DevisManagement() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={() => void handleSave()} disabled={saving || loadingEditForm}>
+            <Button
+              onClick={() => void handleSave()}
+              disabled={saving || loadingEditForm || importingReservation}
+            >
               {saving ? "Enregistrement..." : editingDevis ? "Mettre à jour" : "Créer le devis"}
             </Button>
           </DialogFooter>
