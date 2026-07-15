@@ -88,6 +88,7 @@ export type Reservation = {
   taux_tva_applique: number | string;
   montant_tva: number | string;
   prix_total_ttc: number | string;
+  taxe_sejour_montant?: number | string;
   statut_reservation: ReservationStatut;
   statut_paiement: ReservationStatutPaiement;
   montant_paye: number | string;
@@ -127,6 +128,7 @@ export type ReservationFormData = {
   taux_tva_applique: number;
   montant_tva?: number;
   prix_total_ttc?: number;
+  taxe_sejour_montant?: number;
   statut_reservation?: ReservationStatut;
   statut_paiement?: ReservationStatutPaiement;
   montant_paye?: number;
@@ -187,6 +189,17 @@ export function computeMontantReduction(
   return Math.min(subtotal, Math.round(value * 100) / 100);
 }
 
+export function calculateTaxeSejour(
+  taxeUnitaire: number | null | undefined,
+  nbNuits: number,
+  nbOccupants: number
+) {
+  const unit = Number(taxeUnitaire) || 0;
+  const nights = Math.max(0, Number(nbNuits) || 0);
+  const occupants = Math.max(0, Number(nbOccupants) || 0);
+  return Math.round(unit * nights * occupants * 100) / 100;
+}
+
 export function calculateReservationTotals(fields: {
   prix_chambre_total: number;
   prix_bebe_total?: number;
@@ -195,6 +208,10 @@ export function calculateReservationTotals(fields: {
   type_reduction?: ReservationTypeReduction | null;
   valeur_reduction?: number;
   taux_tva_applique: number;
+  taxe_de_sejour?: number;
+  nb_nuits?: number;
+  nb_occupants?: number;
+  taxe_sejour_montant?: number;
 }) {
   const prixTotalHt =
     fields.prix_chambre_total +
@@ -209,12 +226,23 @@ export function calculateReservationTotals(fields: {
     fields.valeur_reduction
   );
   const prixTotalTtc = Math.max(0, Math.round((ttcAvantReduction - montantReduction) * 100) / 100);
+  const taxeSejourMontant =
+    fields.taxe_sejour_montant != null
+      ? Math.max(0, Number(fields.taxe_sejour_montant) || 0)
+      : calculateTaxeSejour(
+          fields.taxe_de_sejour,
+          fields.nb_nuits ?? 0,
+          fields.nb_occupants ?? 0
+        );
+  const totalAPayer = Math.round((prixTotalTtc + taxeSejourMontant) * 100) / 100;
 
   return {
     montant_reduction: montantReduction,
     prix_total_ht: prixTotalHt,
     montant_tva: montantTva,
     prix_total_ttc: prixTotalTtc,
+    taxe_sejour_montant: taxeSejourMontant,
+    total_a_payer: totalAPayer,
   };
 }
 

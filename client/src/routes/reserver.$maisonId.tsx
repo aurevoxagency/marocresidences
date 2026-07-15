@@ -407,6 +407,9 @@ function ReserverPage() {
   };
 
   const pricing = useMemo(() => {
+    const taxeDeSejour = Number(context?.maison.taxe_de_sejour) || 0;
+    const nbOccupants = occupants.length;
+
     if (!selectedChambre || nbNuits <= 0) {
       const emptyTotals = calculateReservationTotals({
         prix_chambre_total: 0,
@@ -414,6 +417,9 @@ function ReserverPage() {
         prix_enfants_total: 0,
         supplement_total: 0,
         taux_tva_applique: Number(context?.maison.taux_tva) || 0,
+        taxe_de_sejour: taxeDeSejour,
+        nb_nuits: Math.max(0, nbNuits),
+        nb_occupants: nbOccupants,
       });
 
       return {
@@ -475,6 +481,9 @@ function ReserverPage() {
       type_reduction: codeReduction?.type_reduction ?? null,
       valeur_reduction: codeReduction?.valeur_reduction ?? 0,
       taux_tva_applique: Number(context?.maison.taux_tva) || 0,
+      taxe_de_sejour: taxeDeSejour,
+      nb_nuits: nbNuits,
+      nb_occupants: nbOccupants,
     });
 
     const totalsWithoutPromo = calculateReservationTotals({
@@ -483,6 +492,9 @@ function ReserverPage() {
       prix_enfants_total: prixEnfants,
       supplement_total: supplementTotal,
       taux_tva_applique: Number(context?.maison.taux_tva) || 0,
+      taxe_de_sejour: taxeDeSejour,
+      nb_nuits: nbNuits,
+      nb_occupants: nbOccupants,
     });
 
     return {
@@ -500,6 +512,7 @@ function ReserverPage() {
     codeReduction?.type_reduction,
     codeReduction?.valeur_reduction,
     context?.maison.taux_tva,
+    context?.maison.taxe_de_sejour,
     context?.tranches_age,
     supplements,
     saisonId,
@@ -685,6 +698,7 @@ function ReserverPage() {
         prix_total_ht: pricing.totals.prix_total_ht,
         montant_tva: pricing.totals.montant_tva,
         prix_total_ttc: pricing.totals.prix_total_ttc,
+        taxe_sejour_montant: pricing.totals.taxe_sejour_montant,
         notes: notesParts.length > 0 ? notesParts.join(" · ") : null,
         client: {
           civilite,
@@ -1328,6 +1342,14 @@ function ReserverPage() {
                         </span>
                       </div>
                     ) : null}
+                    {pricing.totals.taxe_sejour_montant > 0 ? (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">Taxe de séjour</span>
+                        <span className="font-medium">
+                          {pricing.totals.taxe_sejour_montant.toLocaleString("fr-FR")} {devise}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="rounded-2xl border border-dashed border-black/10 bg-[#fbf8f3] p-4">
@@ -1407,13 +1429,13 @@ function ReserverPage() {
                     <div className="flex items-end justify-between gap-3">
                       <div>
                         <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Total TTC
+                          Total à payer
                         </p>
                         {appliedPromo &&
-                        pricing.totalsWithoutPromo.prix_total_ttc >
-                          pricing.totals.prix_total_ttc ? (
+                        pricing.totalsWithoutPromo.total_a_payer >
+                          pricing.totals.total_a_payer ? (
                           <p className="mt-0.5 text-sm text-muted-foreground line-through">
-                            {pricing.totalsWithoutPromo.prix_total_ttc.toLocaleString("fr-FR")}{" "}
+                            {pricing.totalsWithoutPromo.total_a_payer.toLocaleString("fr-FR")}{" "}
                             {devise}
                           </p>
                         ) : null}
@@ -1421,7 +1443,7 @@ function ReserverPage() {
                           className="mt-0.5 text-2xl font-semibold"
                           style={{ color: "var(--olive-deep)" }}
                         >
-                          {pricing.totals.prix_total_ttc.toLocaleString("fr-FR")} {devise}
+                          {pricing.totals.total_a_payer.toLocaleString("fr-FR")} {devise}
                         </p>
                       </div>
                     </div>

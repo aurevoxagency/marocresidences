@@ -99,6 +99,7 @@ type FormState = {
   site_web: string;
   devise: string;
   taux_tva: string;
+  taxe_de_sejour: string;
   numero_patente: string;
   numero_ice: string;
   numero_classement: string;
@@ -142,6 +143,7 @@ function emptyForm(): FormState {
     site_web: "",
     devise: "MAD",
     taux_tva: "0",
+    taxe_de_sejour: "0",
     numero_patente: "",
     numero_ice: "",
     numero_classement: "",
@@ -235,6 +237,7 @@ function toFormState(maison: Awaited<ReturnType<typeof fetchMaison>>): FormState
     site_web: maison.site_web || "",
     devise: maison.devise || "MAD",
     taux_tva: String(maison.taux_tva ?? 0),
+    taxe_de_sejour: String(maison.taxe_de_sejour ?? 0),
     numero_patente: maison.numero_patente || "",
     numero_ice: maison.numero_ice || "",
     numero_classement: maison.numero_classement || "",
@@ -289,6 +292,7 @@ function toPayload(form: FormState): MaisonFormData {
     site_web: form.site_web.trim() || undefined,
     devise: form.devise.trim() || "MAD",
     taux_tva: Number(form.taux_tva) || 0,
+    taxe_de_sejour: Number(form.taxe_de_sejour) || 0,
     numero_patente: form.numero_patente.trim() || undefined,
     numero_ice: form.numero_ice.trim() || undefined,
     numero_classement: form.numero_classement.trim() || undefined,
@@ -439,7 +443,7 @@ export function MaisonsManagement() {
     setDialogOpen(true);
   };
 
-  const openEditDialog = async (maison: MaisonListItem) => {
+  const openEditDialog = async (maison: { id: number }) => {
     setFormError(null);
     setLoadingForm(true);
     setDialogOpen(true);
@@ -817,6 +821,19 @@ export function MaisonsManagement() {
                       }
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maison-taxe-sejour">Taxe de séjour (par nuit / occupant)</Label>
+                    <Input
+                      id="maison-taxe-sejour"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.taxe_de_sejour}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, taxe_de_sejour: e.target.value }))
+                      }
+                    />
+                  </div>
                   <div className="space-y-3 sm:col-span-2">
                     <div className="flex items-center gap-2">
                       <Checkbox
@@ -1004,7 +1021,7 @@ export function MaisonsManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="maison-tva">Taux TVA</Label>
+                    <Label htmlFor="maison-tva">Taux TVA (%)</Label>
                     <Input
                       id="maison-tva"
                       type="number"
@@ -1431,6 +1448,14 @@ export function MaisonsManagement() {
                 <InfoItem label="Site web" value={viewMaison.site_web} />
                 <InfoItem label="Devise" value={viewMaison.devise} />
                 <InfoItem label="Taux TVA" value={viewMaison.taux_tva} />
+                <InfoItem
+                  label="Taxe de séjour"
+                  value={
+                    viewMaison.taxe_de_sejour != null
+                      ? `${Number(viewMaison.taxe_de_sejour).toLocaleString("fr-FR")} / nuit / occupant`
+                      : "—"
+                  }
+                />
                 <InfoItem label="N° patente" value={viewMaison.numero_patente} />
                 <InfoItem label="N° ICE" value={viewMaison.numero_ice} />
                 <InfoItem label="N° classement" value={viewMaison.numero_classement} />

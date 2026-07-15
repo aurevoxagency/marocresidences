@@ -74,6 +74,7 @@ function pickMaisonFields(body = {}) {
     site_web: body.site_web?.trim() || null,
     devise: body.devise?.trim() || "MAD",
     taux_tva: toNumberOrNull(body.taux_tva) ?? 0,
+    taxe_de_sejour: toNumberOrNull(body.taxe_de_sejour) ?? 0,
     numero_patente: body.numero_patente?.trim() || null,
     numero_ice: body.numero_ice?.trim() || null,
     numero_classement: body.numero_classement?.trim() || null,
@@ -469,9 +470,9 @@ async function createMaison(req, res) {
           lits_bebe_disponibles, nb_lits_bebe,
           adresse, quartier, ville, code_postal, pays,
           latitude, longitude, telephone, whatsapp, email, site_web,
-          devise, taux_tva, numero_patente, numero_ice, numero_classement,
+          devise, taux_tva, taxe_de_sejour, numero_patente, numero_ice, numero_classement,
           statut, heure_checkin, heure_checkout
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         fields.nom,
@@ -493,6 +494,7 @@ async function createMaison(req, res) {
         fields.site_web,
         fields.devise,
         fields.taux_tva,
+        fields.taxe_de_sejour,
         fields.numero_patente,
         fields.numero_ice,
         fields.numero_classement,
@@ -541,7 +543,7 @@ async function updateMaison(req, res) {
           lits_bebe_disponibles = ?, nb_lits_bebe = ?,
           adresse = ?, quartier = ?, ville = ?, code_postal = ?, pays = ?,
           latitude = ?, longitude = ?, telephone = ?, whatsapp = ?, email = ?, site_web = ?,
-          devise = ?, taux_tva = ?, numero_patente = ?, numero_ice = ?, numero_classement = ?,
+          devise = ?, taux_tva = ?, taxe_de_sejour = ?, numero_patente = ?, numero_ice = ?, numero_classement = ?,
           statut = ?, heure_checkin = ?, heure_checkout = ?, date_maj = NOW()
         WHERE id = ?
       `,
@@ -565,6 +567,7 @@ async function updateMaison(req, res) {
         fields.site_web,
         fields.devise,
         fields.taux_tva,
+        fields.taxe_de_sejour,
         fields.numero_patente,
         fields.numero_ice,
         fields.numero_classement,

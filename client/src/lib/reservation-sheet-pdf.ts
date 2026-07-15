@@ -638,7 +638,18 @@ export async function downloadReservationSheetPdf(
               )
             : "Aucune",
       },
-      { label: "Total TTC", amount: formatMoney(reservation.prix_total_ttc), highlight: true },
+      { label: "Total TTC", amount: formatMoney(reservation.prix_total_ttc) },
+      {
+        label: "Taxe de séjour",
+        amount: formatMoney(reservation.taxe_sejour_montant || 0),
+      },
+      {
+        label: "Total à payer",
+        amount: formatMoney(
+          Number(reservation.prix_total_ttc) + Number(reservation.taxe_sejour_montant || 0)
+        ),
+        highlight: true,
+      },
       { label: "Montant payé", amount: formatMoney(reservation.montant_paye) },
     ],
     y

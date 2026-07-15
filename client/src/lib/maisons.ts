@@ -39,6 +39,7 @@ export type MaisonListItem = {
   site_web: string | null;
   devise: string | null;
   taux_tva: number | string | null;
+  taxe_de_sejour?: number | string | null;
   numero_patente: string | null;
   numero_ice: string | null;
   numero_classement: string | null;
@@ -93,6 +94,7 @@ export type MaisonFormData = {
   site_web?: string;
   devise?: string;
   taux_tva?: number;
+  taxe_de_sejour?: number;
   numero_patente?: string;
   numero_ice?: string;
   numero_classement?: string;

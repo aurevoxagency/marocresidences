@@ -27,6 +27,7 @@ export type PublicBookingMaison = {
   heure_checkout: string | null;
   devise: string | null;
   taux_tva: number | string | null;
+  taxe_de_sejour?: number | string | null;
   photo_principale: string | null;
 };
 
@@ -86,6 +87,7 @@ export type PublicReservationPayload = {
   prix_total_ht: number;
   montant_tva: number;
   prix_total_ttc: number;
+  taxe_sejour_montant?: number;
   notes?: string | null;
   client: PublicBookingClient;
   occupants: ReservationOccupantFormData[];

@@ -97,6 +97,13 @@ function pickReservationFields(body = {}) {
   const valeurReduction = toDecimalOrDefault(body.valeur_reduction, 0);
   const subtotal = prixChambre + prixBebe + prixEnfants;
   const tauxTva = toDecimalOrDefault(body.taux_tva_applique, 0);
+  const dateArrivee = emptyToNull(body.date_arrivee);
+  const dateDepart = emptyToNull(body.date_depart);
+  const nbNuits = calculateNights(body.date_arrivee, body.date_depart);
+  const nbAdultes = Math.max(1, toIntOrDefault(body.nb_adultes, 1));
+  const nbrsEnfants = Math.max(0, toIntOrDefault(body.nbrs_enfants, 0));
+  const nbrsBebe = Math.max(0, toIntOrDefault(body.nbrs_bebe, 0));
+  const nbOccupants = nbAdultes + nbrsEnfants + nbrsBebe;
   const prixTotalHt =
     body.prix_total_ht != null ? toDecimalOrDefault(body.prix_total_ht) : subtotal;
   const montantTva =
@@ -114,16 +121,23 @@ function pickReservationFields(body = {}) {
       ? toDecimalOrDefault(body.prix_total_ttc)
       : Math.max(0, Math.round((ttcAvantReduction - montantReduction) * 100) / 100);
 
+  const taxeSejourMontant =
+    body.taxe_sejour_montant != null
+      ? toDecimalOrDefault(body.taxe_sejour_montant, 0)
+      : Math.round(
+          toDecimalOrDefault(body.taxe_de_sejour, 0) * nbNuits * nbOccupants * 100
+        ) / 100;
+
   return {
     client_id: toIntOrDefault(body.client_id, 0),
     chambre_id: toIntOrDefault(body.chambre_id, 0),
     maison_id: toIntOrDefault(body.maison_id, 0),
-    date_arrivee: emptyToNull(body.date_arrivee),
-    date_depart: emptyToNull(body.date_depart),
-    nb_nuits: calculateNights(body.date_arrivee, body.date_depart),
-    nb_adultes: Math.max(1, toIntOrDefault(body.nb_adultes, 1)),
-    nbrs_enfants: Math.max(0, toIntOrDefault(body.nbrs_enfants, 0)),
-    nbrs_bebe: Math.max(0, toIntOrDefault(body.nbrs_bebe, 0)),
+    date_arrivee: dateArrivee,
+    date_depart: dateDepart,
+    nb_nuits: nbNuits,
+    nb_adultes: nbAdultes,
+    nbrs_enfants: nbrsEnfants,
+    nbrs_bebe: nbrsBebe,
     lit_bebe: toBool(body.lit_bebe) ? 1 : 0,
     age_enfant: Math.max(0, toIntOrDefault(body.age_enfant, 0)),
     source: SOURCES.has(body.source) ? body.source : "autre",
@@ -139,6 +153,7 @@ function pickReservationFields(body = {}) {
     taux_tva_applique: tauxTva,
     montant_tva: montantTva,
     prix_total_ttc: prixTotalTtc,
+    taxe_sejour_montant: taxeSejourMontant,
     statut_reservation: STATUTS_RESERVATION.has(body.statut_reservation)
       ? body.statut_reservation
       : "en_attente",
@@ -148,6 +163,22 @@ function pickReservationFields(body = {}) {
     montant_paye: toDecimalOrDefault(body.montant_paye, 0),
     notes: emptyToNull(body.notes?.trim()),
   };
+}
+
+async function fillTaxeSejourFromMaison(connection, fields) {
+  if (fields.taxe_sejour_montant > 0 || !fields.maison_id) {
+    return fields;
+  }
+
+  const [rows] = await connection.query(
+    "SELECT taxe_de_sejour FROM maisons_hotes WHERE id = ? LIMIT 1",
+    [fields.maison_id]
+  );
+  const taux = toDecimalOrDefault(rows[0]?.taxe_de_sejour, 0);
+  const occupants = fields.nb_adultes + fields.nbrs_enfants + fields.nbrs_bebe;
+  fields.taxe_sejour_montant =
+    Math.round(taux * fields.nb_nuits * occupants * 100) / 100;
+  return fields;
 }
 
 const OCCUPANT_TYPES = new Set(["adulte", "enfant", "bebe"]);
@@ -574,6 +605,8 @@ async function createReservation(req, res) {
       fields.code_promo = normalizeCodePromo(promoRows[0]?.code_promo);
     }
 
+    await fillTaxeSejourFromMaison(connection, fields);
+
     await connection.beginTransaction();
 
     const reference = await generateReference(connection);
@@ -585,9 +618,9 @@ async function createReservation(req, res) {
           date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, lit_bebe, age_enfant,
           source, promotion_id, code_promo, type_reduction, valeur_reduction, supplement_id,
           prix_chambre_total, prix_bebe_total, prix_enfants_total,
-          prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc,
+          prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc, taxe_sejour_montant,
           statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -615,6 +648,7 @@ async function createReservation(req, res) {
         fields.taux_tva_applique,
         fields.montant_tva,
         fields.prix_total_ttc,
+        fields.taxe_sejour_montant,
         fields.statut_reservation,
         fields.statut_paiement,
         fields.montant_paye,
@@ -690,6 +724,8 @@ async function updateReservation(req, res) {
       fields.code_promo = null;
     }
 
+    await fillTaxeSejourFromMaison(connection, fields);
+
     await connection.beginTransaction();
 
     const [result] = await connection.query(
@@ -699,7 +735,7 @@ async function updateReservation(req, res) {
           date_arrivee = ?, date_depart = ?, nb_nuits = ?, nb_adultes = ?, nbrs_enfants = ?, nbrs_bebe = ?, lit_bebe = ?, age_enfant = ?,
           source = ?, promotion_id = ?, code_promo = ?, type_reduction = ?, valeur_reduction = ?, supplement_id = ?,
           prix_chambre_total = ?, prix_bebe_total = ?, prix_enfants_total = ?,
-          prix_total_ht = ?, taux_tva_applique = ?, montant_tva = ?, prix_total_ttc = ?,
+          prix_total_ht = ?, taux_tva_applique = ?, montant_tva = ?, prix_total_ttc = ?, taxe_sejour_montant = ?,
           statut_reservation = ?, statut_paiement = ?, montant_paye = ?, notes = ?
         WHERE id = ?
       `,
@@ -728,6 +764,7 @@ async function updateReservation(req, res) {
         fields.taux_tva_applique,
         fields.montant_tva,
         fields.prix_total_ttc,
+        fields.taxe_sejour_montant,
         fields.statut_reservation,
         fields.statut_paiement,
         fields.montant_paye,
@@ -908,12 +945,19 @@ async function createPublicReservation(req, res) {
     }
 
     const [maisonRows] = await connection.query(
-      "SELECT id FROM maisons_hotes WHERE id = ? AND statut = 'actif' LIMIT 1",
+      "SELECT id, taxe_de_sejour FROM maisons_hotes WHERE id = ? AND statut = 'actif' LIMIT 1",
       [fields.maison_id]
     );
 
     if (maisonRows.length === 0) {
       return res.status(400).json({ message: "Maison d'hôtes introuvable ou inactive." });
+    }
+
+    if (fields.taxe_sejour_montant <= 0) {
+      const taux = toDecimalOrDefault(maisonRows[0].taxe_de_sejour, 0);
+      const occupants = fields.nb_adultes + fields.nbrs_enfants + fields.nbrs_bebe;
+      fields.taxe_sejour_montant =
+        Math.round(taux * fields.nb_nuits * occupants * 100) / 100;
     }
 
     const validationError = await validateReservationRelations(connection, fields);
@@ -944,9 +988,9 @@ async function createPublicReservation(req, res) {
           date_arrivee, date_depart, nb_nuits, nb_adultes, nbrs_enfants, nbrs_bebe, lit_bebe, age_enfant,
           source, promotion_id, code_promo, type_reduction, valeur_reduction, supplement_id,
           prix_chambre_total, prix_bebe_total, prix_enfants_total,
-          prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc,
+          prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc, taxe_sejour_montant,
           statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -974,6 +1018,7 @@ async function createPublicReservation(req, res) {
         fields.taux_tva_applique,
         fields.montant_tva,
         fields.prix_total_ttc,
+        fields.taxe_sejour_montant,
         fields.statut_reservation,
         fields.statut_paiement,
         fields.montant_paye,

@@ -802,7 +802,14 @@ export function ReservationsManagement() {
     selectedPromotion,
   ]);
 
+  const selectedMaison = useMemo(
+    () => maisons.find((item) => String(item.id) === form.maison_id) || null,
+    [maisons, form.maison_id]
+  );
+
   const computedTotals = useMemo(() => {
+    const nbOccupants = nbAdultes + nbrsEnfants + nbrsBebe;
+
     return calculateReservationTotals({
       prix_chambre_total: Number(form.prix_chambre_total) || 0,
       prix_bebe_total: Number(form.prix_bebe_total) || 0,
@@ -811,8 +818,19 @@ export function ReservationsManagement() {
       type_reduction: form.type_reduction || null,
       valeur_reduction: Number(form.valeur_reduction) || 0,
       taux_tva_applique: Number(form.taux_tva_applique) || 0,
+      taxe_de_sejour: Number(selectedMaison?.taxe_de_sejour) || 0,
+      nb_nuits: nbNuits,
+      nb_occupants: nbOccupants,
     });
-  }, [form, supplementTotal]);
+  }, [
+    form,
+    supplementTotal,
+    selectedMaison?.taxe_de_sejour,
+    nbNuits,
+    nbAdultes,
+    nbrsEnfants,
+    nbrsBebe,
+  ]);
 
   const filteredReservations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1247,6 +1265,7 @@ export function ReservationsManagement() {
       prix_total_ht: computedTotals.prix_total_ht,
       montant_tva: computedTotals.montant_tva,
       prix_total_ttc: computedTotals.prix_total_ttc,
+      taxe_sejour_montant: computedTotals.taxe_sejour_montant,
       statut_reservation: form.statut_reservation,
       statut_paiement: form.statut_paiement,
       montant_paye: Number(form.montant_paye) || 0,
@@ -2358,9 +2377,19 @@ export function ReservationsManagement() {
                       <span>- {formatMoney(computedTotals.montant_reduction)}</span>
                     </div>
                   ) : null}
-                  <div className="mt-1 flex items-center justify-between gap-3 text-[15px] font-semibold text-slate-900">
+                  <div className="flex items-center justify-between gap-3">
                     <span>Total TTC</span>
                     <span>{formatMoney(computedTotals.prix_total_ttc)}</span>
+                  </div>
+                  {computedTotals.taxe_sejour_montant > 0 ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Taxe de séjour</span>
+                      <span>{formatMoney(computedTotals.taxe_sejour_montant)}</span>
+                    </div>
+                  ) : null}
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[15px] font-semibold text-slate-900">
+                    <span>Total à payer</span>
+                    <span>{formatMoney(computedTotals.total_a_payer)}</span>
                   </div>
                 </div>
               </div>
@@ -2681,6 +2710,10 @@ export function ReservationsManagement() {
                         return `${count} occupant${count > 1 ? "s" : ""} · ${formatMoney(total)}`;
                       })()}
                     />
+                    <FicheInfoItem
+                      label="Taxe de séjour"
+                      value={formatMoney(viewReservation.taxe_sejour_montant || 0)}
+                    />
                   </div>
                   <div className="rounded-2xl border border-[#ddd6fe] bg-[#f5f3ff] px-4 py-4 text-[13px] text-slate-700">
                     <div className="flex items-center justify-between gap-3">
@@ -2691,9 +2724,24 @@ export function ReservationsManagement() {
                       <span>TVA ({Number(viewReservation.taux_tva_applique) || 0}%)</span>
                       <span className="font-medium">{formatMoney(viewReservation.montant_tva)}</span>
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#ddd6fe] pt-3 text-base font-semibold text-slate-900">
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#ddd6fe] pt-3">
                       <span>Total TTC</span>
-                      <span>{formatMoney(viewReservation.prix_total_ttc)}</span>
+                      <span className="font-medium">{formatMoney(viewReservation.prix_total_ttc)}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <span>Taxe de séjour</span>
+                      <span className="font-medium">
+                        {formatMoney(viewReservation.taxe_sejour_montant || 0)}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#ddd6fe] pt-3 text-base font-semibold text-slate-900">
+                      <span>Total à payer</span>
+                      <span>
+                        {formatMoney(
+                          Number(viewReservation.prix_total_ttc) +
+                            Number(viewReservation.taxe_sejour_montant || 0)
+                        )}
+                      </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3 text-[12px] text-slate-500">
                       <span>Montant payé</span>

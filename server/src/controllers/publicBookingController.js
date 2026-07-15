@@ -267,6 +267,7 @@ async function getBookingContext(req, res) {
           m.heure_checkout,
           m.devise,
           m.taux_tva,
+          m.taxe_de_sejour,
           (
             SELECT p.url
             FROM photos p
