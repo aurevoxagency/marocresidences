@@ -32,6 +32,7 @@ import {
   calculateNights,
   calculateOccupantSupplementStayTotal,
   calculateReservationTotals,
+  countTaxeSejourAssujettis,
   resolveTrancheAgeId,
   type ReservationOccupantType,
   type ReservationTypeReduction,
@@ -408,7 +409,11 @@ function ReserverPage() {
 
   const pricing = useMemo(() => {
     const taxeDeSejour = Number(context?.maison.taxe_de_sejour) || 0;
-    const nbOccupants = occupants.length;
+    const adultsForTax = occupants.filter((item) => item.type_occupant === "adulte");
+    const nbAssujettisTaxe = countTaxeSejourAssujettis({
+      nb_adultes: adultsForTax.length,
+      occupants,
+    });
 
     if (!selectedChambre || nbNuits <= 0) {
       const emptyTotals = calculateReservationTotals({
@@ -419,7 +424,7 @@ function ReserverPage() {
         taux_tva_applique: Number(context?.maison.taux_tva) || 0,
         taxe_de_sejour: taxeDeSejour,
         nb_nuits: Math.max(0, nbNuits),
-        nb_occupants: nbOccupants,
+        nb_assujettis_taxe: nbAssujettisTaxe,
       });
 
       return {
@@ -483,7 +488,7 @@ function ReserverPage() {
       taux_tva_applique: Number(context?.maison.taux_tva) || 0,
       taxe_de_sejour: taxeDeSejour,
       nb_nuits: nbNuits,
-      nb_occupants: nbOccupants,
+      nb_assujettis_taxe: nbAssujettisTaxe,
     });
 
     const totalsWithoutPromo = calculateReservationTotals({
@@ -494,7 +499,7 @@ function ReserverPage() {
       taux_tva_applique: Number(context?.maison.taux_tva) || 0,
       taxe_de_sejour: taxeDeSejour,
       nb_nuits: nbNuits,
-      nb_occupants: nbOccupants,
+      nb_assujettis_taxe: nbAssujettisTaxe,
     });
 
     return {

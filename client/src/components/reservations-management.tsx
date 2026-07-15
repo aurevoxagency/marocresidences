@@ -81,6 +81,7 @@ import {
   calculateNights,
   calculateReservationTotals,
   computeMontantReduction,
+  countTaxeSejourAssujettis,
   createReservation,
   deleteReservation,
   fetchReservation,
@@ -808,7 +809,13 @@ export function ReservationsManagement() {
   );
 
   const computedTotals = useMemo(() => {
-    const nbOccupants = nbAdultes + nbrsEnfants + nbrsBebe;
+    const nbAssujettisTaxe = countTaxeSejourAssujettis({
+      nb_adultes: nbAdultes,
+      occupants: occupants.map((item) => ({
+        type_occupant: item.type_occupant,
+        age_enfant: item.age_enfant !== "" ? Number(item.age_enfant) : null,
+      })),
+    });
 
     return calculateReservationTotals({
       prix_chambre_total: Number(form.prix_chambre_total) || 0,
@@ -820,7 +827,7 @@ export function ReservationsManagement() {
       taux_tva_applique: Number(form.taux_tva_applique) || 0,
       taxe_de_sejour: Number(selectedMaison?.taxe_de_sejour) || 0,
       nb_nuits: nbNuits,
-      nb_occupants: nbOccupants,
+      nb_assujettis_taxe: nbAssujettisTaxe,
     });
   }, [
     form,
@@ -828,8 +835,7 @@ export function ReservationsManagement() {
     selectedMaison?.taxe_de_sejour,
     nbNuits,
     nbAdultes,
-    nbrsEnfants,
-    nbrsBebe,
+    occupants,
   ]);
 
   const filteredReservations = useMemo(() => {

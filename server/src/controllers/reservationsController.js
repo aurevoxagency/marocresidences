@@ -89,6 +89,37 @@ function calculateNights(dateArrivee, dateDepart) {
   return diff > 0 ? diff : 0;
 }
 
+/** Enfants de moins de 12 ans (et bébés) sont exonérés. */
+const TAXE_SEJOUR_AGE_EXONERATION = 12;
+
+function countTaxeSejourAssujettis(fields, occupants = []) {
+  if (Array.isArray(occupants) && occupants.length > 0) {
+    return occupants.reduce((count, occupant) => {
+      if (occupant.type_occupant === "adulte") {
+        return count + 1;
+      }
+
+      if (occupant.type_occupant === "enfant") {
+        const age = Number(occupant.age_enfant);
+        if (Number.isFinite(age) && age >= TAXE_SEJOUR_AGE_EXONERATION) {
+          return count + 1;
+        }
+      }
+
+      return count;
+    }, 0);
+  }
+
+  return Math.max(0, toIntOrDefault(fields?.nb_adultes, 0));
+}
+
+function calculateTaxeSejourMontant(taux, nbNuits, nbAssujettis) {
+  return (
+    Math.round(toDecimalOrDefault(taux, 0) * Math.max(0, nbNuits) * Math.max(0, nbAssujettis) * 100) /
+    100
+  );
+}
+
 function pickReservationFields(body = {}) {
   const prixChambre = toDecimalOrDefault(body.prix_chambre_total, 0);
   const prixBebe = toDecimalOrDefault(body.prix_bebe_total, 0);
@@ -103,7 +134,6 @@ function pickReservationFields(body = {}) {
   const nbAdultes = Math.max(1, toIntOrDefault(body.nb_adultes, 1));
   const nbrsEnfants = Math.max(0, toIntOrDefault(body.nbrs_enfants, 0));
   const nbrsBebe = Math.max(0, toIntOrDefault(body.nbrs_bebe, 0));
-  const nbOccupants = nbAdultes + nbrsEnfants + nbrsBebe;
   const prixTotalHt =
     body.prix_total_ht != null ? toDecimalOrDefault(body.prix_total_ht) : subtotal;
   const montantTva =
@@ -121,12 +151,19 @@ function pickReservationFields(body = {}) {
       ? toDecimalOrDefault(body.prix_total_ttc)
       : Math.max(0, Math.round((ttcAvantReduction - montantReduction) * 100) / 100);
 
+  const occupantsPreview = Array.isArray(body.occupants) ? body.occupants : [];
+  const nbAssujettisTaxe = countTaxeSejourAssujettis(
+    { nb_adultes: nbAdultes },
+    occupantsPreview
+  );
   const taxeSejourMontant =
     body.taxe_sejour_montant != null
       ? toDecimalOrDefault(body.taxe_sejour_montant, 0)
-      : Math.round(
-          toDecimalOrDefault(body.taxe_de_sejour, 0) * nbNuits * nbOccupants * 100
-        ) / 100;
+      : calculateTaxeSejourMontant(
+          body.taxe_de_sejour,
+          nbNuits,
+          nbAssujettisTaxe
+        );
 
   return {
     client_id: toIntOrDefault(body.client_id, 0),
@@ -165,7 +202,7 @@ function pickReservationFields(body = {}) {
   };
 }
 
-async function fillTaxeSejourFromMaison(connection, fields) {
+async function fillTaxeSejourFromMaison(connection, fields, occupants = []) {
   if (fields.taxe_sejour_montant > 0 || !fields.maison_id) {
     return fields;
   }
@@ -175,9 +212,12 @@ async function fillTaxeSejourFromMaison(connection, fields) {
     [fields.maison_id]
   );
   const taux = toDecimalOrDefault(rows[0]?.taxe_de_sejour, 0);
-  const occupants = fields.nb_adultes + fields.nbrs_enfants + fields.nbrs_bebe;
-  fields.taxe_sejour_montant =
-    Math.round(taux * fields.nb_nuits * occupants * 100) / 100;
+  const nbAssujettis = countTaxeSejourAssujettis(fields, occupants);
+  fields.taxe_sejour_montant = calculateTaxeSejourMontant(
+    taux,
+    fields.nb_nuits,
+    nbAssujettis
+  );
   return fields;
 }
 
@@ -605,7 +645,7 @@ async function createReservation(req, res) {
       fields.code_promo = normalizeCodePromo(promoRows[0]?.code_promo);
     }
 
-    await fillTaxeSejourFromMaison(connection, fields);
+    await fillTaxeSejourFromMaison(connection, fields, occupants);
 
     await connection.beginTransaction();
 
@@ -724,7 +764,7 @@ async function updateReservation(req, res) {
       fields.code_promo = null;
     }
 
-    await fillTaxeSejourFromMaison(connection, fields);
+    await fillTaxeSejourFromMaison(connection, fields, occupants);
 
     await connection.beginTransaction();
 
@@ -955,9 +995,12 @@ async function createPublicReservation(req, res) {
 
     if (fields.taxe_sejour_montant <= 0) {
       const taux = toDecimalOrDefault(maisonRows[0].taxe_de_sejour, 0);
-      const occupants = fields.nb_adultes + fields.nbrs_enfants + fields.nbrs_bebe;
-      fields.taxe_sejour_montant =
-        Math.round(taux * fields.nb_nuits * occupants * 100) / 100;
+      const nbAssujettis = countTaxeSejourAssujettis(fields, occupants);
+      fields.taxe_sejour_montant = calculateTaxeSejourMontant(
+        taux,
+        fields.nb_nuits,
+        nbAssujettis
+      );
     }
 
     const validationError = await validateReservationRelations(connection, fields);

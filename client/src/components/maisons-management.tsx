@@ -822,7 +822,9 @@ export function MaisonsManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="maison-taxe-sejour">Taxe de séjour (par nuit / occupant)</Label>
+                    <Label htmlFor="maison-taxe-sejour">
+                      Taxe de séjour (par nuit / adulte)
+                    </Label>
                     <Input
                       id="maison-taxe-sejour"
                       type="number"
@@ -1452,7 +1454,7 @@ export function MaisonsManagement() {
                   label="Taxe de séjour"
                   value={
                     viewMaison.taxe_de_sejour != null
-                      ? `${Number(viewMaison.taxe_de_sejour).toLocaleString("fr-FR")} / nuit / occupant`
+                      ? `${Number(viewMaison.taxe_de_sejour).toLocaleString("fr-FR")} / nuit / adulte (enfants < 12 ans exonérés)`
                       : "—"
                   }
                 />

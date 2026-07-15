@@ -189,15 +189,46 @@ export function computeMontantReduction(
   return Math.min(subtotal, Math.round(value * 100) / 100);
 }
 
+export const TAXE_SEJOUR_AGE_EXONERATION = 12;
+
+export function countTaxeSejourAssujettis(params: {
+  nb_adultes?: number;
+  occupants?: Array<{
+    type_occupant?: string | null;
+    age_enfant?: number | string | null;
+  }> | null;
+}) {
+  const occupants = params.occupants;
+
+  if (Array.isArray(occupants) && occupants.length > 0) {
+    return occupants.reduce((count, occupant) => {
+      if (occupant.type_occupant === "adulte") {
+        return count + 1;
+      }
+
+      if (occupant.type_occupant === "enfant") {
+        const age = Number(occupant.age_enfant);
+        if (Number.isFinite(age) && age >= TAXE_SEJOUR_AGE_EXONERATION) {
+          return count + 1;
+        }
+      }
+
+      return count;
+    }, 0);
+  }
+
+  return Math.max(0, Number(params.nb_adultes) || 0);
+}
+
 export function calculateTaxeSejour(
   taxeUnitaire: number | null | undefined,
   nbNuits: number,
-  nbOccupants: number
+  nbAssujettis: number
 ) {
   const unit = Number(taxeUnitaire) || 0;
   const nights = Math.max(0, Number(nbNuits) || 0);
-  const occupants = Math.max(0, Number(nbOccupants) || 0);
-  return Math.round(unit * nights * occupants * 100) / 100;
+  const assujettis = Math.max(0, Number(nbAssujettis) || 0);
+  return Math.round(unit * nights * assujettis * 100) / 100;
 }
 
 export function calculateReservationTotals(fields: {
@@ -210,6 +241,9 @@ export function calculateReservationTotals(fields: {
   taux_tva_applique: number;
   taxe_de_sejour?: number;
   nb_nuits?: number;
+  /** Nombre de personnes assujetties (adultes + enfants ≥ 12 ans). */
+  nb_assujettis_taxe?: number;
+  /** @deprecated Prefer nb_assujettis_taxe — kept for compatibility. */
   nb_occupants?: number;
   taxe_sejour_montant?: number;
 }) {
@@ -226,13 +260,14 @@ export function calculateReservationTotals(fields: {
     fields.valeur_reduction
   );
   const prixTotalTtc = Math.max(0, Math.round((ttcAvantReduction - montantReduction) * 100) / 100);
+  const nbAssujettis = fields.nb_assujettis_taxe ?? fields.nb_occupants ?? 0;
   const taxeSejourMontant =
     fields.taxe_sejour_montant != null
       ? Math.max(0, Number(fields.taxe_sejour_montant) || 0)
       : calculateTaxeSejour(
           fields.taxe_de_sejour,
           fields.nb_nuits ?? 0,
-          fields.nb_occupants ?? 0
+          nbAssujettis
         );
   const totalAPayer = Math.round((prixTotalTtc + taxeSejourMontant) * 100) / 100;
 
