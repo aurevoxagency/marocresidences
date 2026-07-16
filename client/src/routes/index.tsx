@@ -31,7 +31,7 @@ import { format, parseISO } from "date-fns";
 import { enUS, fr } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 
-import logo from "@/assets/logo.jpg";
+import logo from "@/assets/header-maroc-residences-removebg-preview.png";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -603,7 +603,7 @@ function Nav({
           <img
             src={logo}
             alt="Maroc Résidences"
-            className="h-8 w-auto object-contain sm:h-10"
+            className="h-9 w-auto max-w-[200px] object-contain sm:h-11 sm:max-w-[260px]"
           />
         </a>
 
@@ -2464,38 +2464,118 @@ function Footer() {
   const { t } = useLanguage();
 
   const footerColumns = [
-    { title: t.footer.explorer, items: t.footer.explorerItems },
-    { title: t.footer.hosts, items: t.footer.hostsItems },
-    { title: t.footer.about, items: t.footer.aboutItems },
+    {
+      title: t.footer.explorer,
+      items: [
+        { label: t.footer.explorerItems[0], href: "#destinations" },
+        { label: t.footer.explorerItems[1], href: "#maisons" },
+        { label: t.footer.explorerItems[2], href: "#experiences" },
+        { label: t.footer.explorerItems[3], href: "#avis" },
+      ],
+    },
+    {
+      title: t.footer.hosts,
+      items: t.footer.hostsItems.map((label) => ({ label, href: "#contact" })),
+    },
+    {
+      title: t.footer.about,
+      items: [
+        { label: t.footer.aboutItems[0], href: "#experiences" },
+        { label: t.footer.aboutItems[1], href: "#avis" },
+        { label: t.footer.aboutItems[2], href: "#contact" },
+        { label: t.footer.aboutItems[3], href: "#faq" },
+      ],
+    },
   ] as const;
 
   return (
-    <footer id="contact" className="border-t border-border/70">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-10 px-6 py-16 sm:grid-cols-4 lg:px-10">
-        <div className="col-span-2 sm:col-span-1">
-          <img src={logo} alt="Maroc Résidences" className="h-10 w-auto object-contain" />
-          <p className="mt-4 max-w-xs text-sm text-muted-foreground">
-            {t.footer.tagline}
-          </p>
-        </div>
-        {footerColumns.map((col) => (
-          <div key={col.title}>
-            <div className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{col.title}</div>
-            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              {col.items.map((i) => (
-                <li key={i}><a href="#" className="transition hover:text-foreground">{i}</a></li>
-              ))}
-            </ul>
+    <footer
+      id="contact"
+      className="relative overflow-hidden border-t border-border/70"
+      style={{
+        background:
+          "linear-gradient(180deg, color-mix(in oklab, var(--sand) 45%, var(--cream)) 0%, var(--cream) 100%)",
+        color: "var(--ink)",
+      }}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 12% 0%, color-mix(in oklab, var(--olive) 12%, transparent), transparent 45%), radial-gradient(circle at 90% 100%, color-mix(in oklab, var(--terracotta) 10%, transparent), transparent 40%)",
+        }}
+      />
+
+      <div className="relative mx-auto max-w-7xl px-6 pb-10 pt-16 lg:px-10 lg:pb-12 lg:pt-20">
+        <div className="grid gap-12 lg:grid-cols-[1.35fr_1fr_1fr_1fr]">
+          <div className="max-w-md">
+            <a href="#" className="inline-block">
+              <img
+                src={logo}
+                alt="Maroc Résidences"
+                className="h-14 w-auto max-w-[280px] object-contain sm:h-16 sm:max-w-[320px]"
+              />
+            </a>
+            <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
+              {t.footer.tagline}
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href="#maisons"
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:brightness-110"
+                style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
+              >
+                {t.houses.seeAll}
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </a>
+              <a
+                href="mailto:contact@marocresidences.com"
+                className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition hover:border-[color-mix(in_oklab,var(--olive)_35%,var(--border))] hover:text-foreground"
+              >
+                <Phone className="h-3.5 w-3.5" />
+                {t.footer.aboutItems[2]}
+              </a>
+            </div>
           </div>
-        ))}
-      </div>
-      <div className="border-t border-border/70">
-        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-2 px-6 py-6 text-xs text-muted-foreground sm:flex-row sm:items-center lg:px-10">
-          <div>© {new Date().getFullYear()} Maroc Residences — {t.footer.rights}</div>
-          <div className="flex gap-5">
-            <a href="#" className="hover:text-foreground">{t.footer.privacy}</a>
-            <a href="#" className="hover:text-foreground">{t.footer.terms}</a>
-            <a href="#" className="hover:text-foreground">{t.footer.cookies}</a>
+
+          {footerColumns.map((col) => (
+            <div key={col.title}>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                style={{ color: "var(--olive-deep)" }}
+              >
+                {col.title}
+              </p>
+              <ul className="mt-4 space-y-2.5">
+                {col.items.map((item) => (
+                  <li key={item.label}>
+                    <a
+                      href={item.href}
+                      className="text-sm text-muted-foreground transition hover:text-foreground"
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-14 flex flex-col gap-4 border-t border-border/70 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            © {new Date().getFullYear()} Maroc Résidences — {t.footer.rights}
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+            <a href="#" className="transition hover:text-foreground">
+              {t.footer.privacy}
+            </a>
+            <a href="#" className="transition hover:text-foreground">
+              {t.footer.terms}
+            </a>
+            <a href="#" className="transition hover:text-foreground">
+              {t.footer.cookies}
+            </a>
           </div>
         </div>
       </div>

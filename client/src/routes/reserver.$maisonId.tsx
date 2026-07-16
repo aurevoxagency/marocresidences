@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 
-import logo from "@/assets/logo.jpg";
+import logo from "@/assets/header-maroc-residences-removebg-preview.png";
 import { AuthDialog } from "@/components/auth-dialog";
 import { Button } from "@/components/ui/button";
 import { fetchCurrentUser, getAuthToken } from "@/lib/auth";
@@ -812,11 +812,12 @@ function ReserverPage() {
         }}
       >
         <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-6">
-          <Link to="/" className="flex items-center gap-3">
-            <img src={logo} alt="Maroc Résidences" className="h-10 w-10 rounded-full object-cover" />
-            <span className="font-semibold tracking-tight" style={{ color: "var(--ink)" }}>
-              Maroc Résidences
-            </span>
+          <Link to="/" className="inline-block">
+            <img
+              src={logo}
+              alt="Maroc Résidences"
+              className="h-11 w-auto max-w-[240px] object-contain"
+            />
           </Link>
         </header>
         <main className="mx-auto max-w-lg px-6 pb-16 pt-10 text-center">
@@ -866,11 +867,12 @@ function ReserverPage() {
         }}
       >
         <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-6">
-          <Link to="/" className="flex items-center gap-3">
-            <img src={logo} alt="Maroc Résidences" className="h-10 w-10 rounded-full object-cover" />
-            <span className="font-semibold tracking-tight" style={{ color: "var(--ink)" }}>
-              Maroc Résidences
-            </span>
+          <Link to="/" className="inline-block">
+            <img
+              src={logo}
+              alt="Maroc Résidences"
+              className="h-11 w-auto max-w-[240px] object-contain"
+            />
           </Link>
         </header>
 
@@ -916,23 +918,12 @@ function ReserverPage() {
     >
       <header className="border-b border-black/5 bg-white/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <Link to="/" className="flex items-center gap-3">
+          <Link to="/" className="inline-block">
             <img
               src={logo}
               alt="Maroc Résidences"
-              className="h-11 w-11 rounded-full object-cover ring-2 ring-[color:var(--olive-deep)]/15"
+              className="h-11 w-auto max-w-[240px] object-contain sm:h-12 sm:max-w-[280px]"
             />
-            <div>
-              <p
-                className="text-[11px] font-semibold uppercase tracking-[0.18em]"
-                style={{ color: "var(--terracotta)" }}
-              >
-                Réservation
-              </p>
-              <p className="font-semibold tracking-tight" style={{ color: "var(--ink)" }}>
-                Maroc Résidences
-              </p>
-            </div>
           </Link>
           <Link
             to="/"

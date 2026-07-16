@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, Loader2, Mail, Lock, User, Phone } from "lucide-react";
 
-import logo from "@/assets/logo.jpg";
+import logo from "@/assets/header-maroc-residences-removebg-preview.png";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -352,7 +352,7 @@ export function AuthDialog({
       >
         <div className="border-b border-border/60 bg-muted/30 px-6 pb-5 pt-8">
           <DialogHeader className="items-center space-y-4 text-center">
-            <img src={logo} alt="Maroc Résidences" className="h-11 w-auto object-contain" />
+            <img src={logo} alt="Maroc Résidences" className="h-12 w-auto max-w-[260px] object-contain" />
             <div className="space-y-1.5">
               <DialogTitle className="font-display text-2xl font-medium">
                 Votre espace voyageur

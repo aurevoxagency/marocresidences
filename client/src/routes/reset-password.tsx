@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
-import logo from "@/assets/logo.jpg";
+import logo from "@/assets/header-maroc-residences-removebg-preview.png";
 import { Button } from "@/components/ui/button";
 import { AuthDialog } from "@/components/auth-dialog";
 import { resetPassword } from "@/lib/auth";
@@ -91,7 +91,7 @@ function ResetPasswordPage() {
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-[520px] overflow-hidden rounded-3xl border border-border/70 bg-card shadow-soft">
         <div className="border-b border-border/60 bg-muted/30 px-6 pb-5 pt-8 text-center">
-          <img src={logo} alt="Maroc Résidences" className="mx-auto h-11 w-auto object-contain" />
+          <img src={logo} alt="Maroc Résidences" className="mx-auto h-12 w-auto max-w-[260px] object-contain" />
           <h1 className="mt-4 font-display text-2xl font-medium text-foreground">
             Nouveau mot de passe
           </h1>
