@@ -29,6 +29,12 @@ export type PublicBookingMaison = {
   taux_tva: number | string | null;
   taxe_de_sejour?: number | string | null;
   photo_principale: string | null;
+  photos?: Array<{
+    url: string;
+    legende?: string | null;
+    est_principale?: boolean;
+    ordre?: number;
+  }>;
 };
 
 export type PublicBookingSaison = {

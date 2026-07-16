@@ -11,6 +11,8 @@ import {
   Star,
   ArrowRight,
   ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
   ChevronDown,
   Minus,
   Plus,
@@ -99,6 +101,7 @@ import {
   resolvePhotoUrl,
   type MaisonListItem,
 } from "@/lib/maisons";
+import { fetchPublicBookingContext } from "@/lib/public-booking";
 import heroVideo from "@/assets/herosection.mp4";
 import destMarrakech from "@/assets/dest-marrakech.jpg";
 import destChefchaouen from "@/assets/dest-chefchaouen.jpg";
@@ -173,6 +176,10 @@ function getDestinationCities(maisons: MaisonListItem[]) {
   return buildDestinationCards(maisons).map((item) => item.name);
 }
 
+type DialogMaison = MaisonListItem & {
+  photos?: Array<{ url?: string | null }>;
+};
+
 function MaisonDetailsDialog({
   maison,
   onClose,
@@ -180,7 +187,7 @@ function MaisonDetailsDialog({
   primaryLabel,
   onPrimary,
 }: {
-  maison: MaisonListItem | null;
+  maison: DialogMaison | null;
   onClose: () => void;
   priceHint: string;
   primaryLabel: string;
@@ -188,6 +195,29 @@ function MaisonDetailsDialog({
 }) {
   const { currency } = useCurrency();
   const { t } = useLanguage();
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const maisonPhotos = useMemo(() => {
+    if (!maison) {
+      return [];
+    }
+
+    const fromMaison = Array.isArray((maison as { photos?: Array<{ url?: string | null }> }).photos)
+      ? (maison as { photos?: Array<{ url?: string | null }> }).photos || []
+      : [];
+
+    const urls = fromMaison
+      .map((photo) => resolvePhotoUrl(photo?.url || ""))
+      .filter(Boolean) as string[];
+
+    const primary = resolvePhotoUrl(maison.photo_principale) || "";
+    const merged = primary ? [primary, ...urls] : urls;
+
+    return Array.from(new Set(merged));
+  }, [maison]);
+
+  useEffect(() => {
+    setPhotoIndex(0);
+  }, [maison?.id]);
 
   return (
     <Dialog
@@ -203,11 +233,33 @@ function MaisonDetailsDialog({
           <>
             <div className="relative h-48 w-full overflow-hidden sm:h-56">
               <img
-                src={resolvePhotoUrl(maison.photo_principale) || house1}
+                src={maisonPhotos[photoIndex] || resolvePhotoUrl(maison.photo_principale) || house1}
                 alt={maison.nom}
                 className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+              {maisonPhotos.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPhotoIndex((current) => (current - 1 + maisonPhotos.length) % maisonPhotos.length)
+                    }
+                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/35 p-1.5 text-white backdrop-blur transition hover:bg-black/50"
+                    aria-label="Photo précédente"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoIndex((current) => (current + 1) % maisonPhotos.length)}
+                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/35 p-1.5 text-white backdrop-blur transition hover:bg-black/50"
+                    aria-label="Photo suivante"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </>
+              ) : null}
               <div className="absolute inset-x-0 bottom-0 p-5 text-white">
                 <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/80">
                   <MapPin className="h-3.5 w-3.5" />
@@ -224,6 +276,23 @@ function MaisonDetailsDialog({
                 </DialogHeader>
               </div>
             </div>
+            {maisonPhotos.length > 1 ? (
+              <div className="flex gap-2 overflow-x-auto px-4 py-3 sm:px-5">
+                {maisonPhotos.map((photo, index) => (
+                  <button
+                    key={`${photo}-${index}`}
+                    type="button"
+                    onClick={() => setPhotoIndex(index)}
+                    className={`h-16 w-24 shrink-0 overflow-hidden rounded-lg border transition ${
+                      photoIndex === index ? "border-[#3f5b2d]" : "border-black/10"
+                    }`}
+                    aria-label={`Photo ${index + 1}`}
+                  >
+                    <img src={photo} alt={`${maison.nom} ${index + 1}`} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             <div className="space-y-5 p-5 sm:p-6">
               {maison.categorie ? (
@@ -248,26 +317,21 @@ function MaisonDetailsDialog({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                    {t.results.rooms}
+                    Chambres disponibles
                   </p>
                   <p className="mt-1 text-lg font-semibold">{maison.nb_chambres || "—"}</p>
                 </div>
                 <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                    Check-in
+                    Horaire
                   </p>
-                  <p className="mt-1 text-lg font-semibold">
-                    {(maison.heure_checkin || "14:00").slice(0, 5)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
-                    Check-out
-                  </p>
-                  <p className="mt-1 text-lg font-semibold">
-                    {(maison.heure_checkout || "12:00").slice(0, 5)}
+                  <p className="mt-1 text-sm font-semibold">
+                    CheckIn : {(maison.heure_checkin || "14:00").slice(0, 5)}
+                    <br />
+                    CheckOut : {(maison.heure_checkout || "12:00").slice(0, 5)}
                   </p>
                 </div>
+                <div className="hidden rounded-2xl bg-[#f7f2ea] px-3.5 py-3 sm:block" />
               </div>
 
               {(maison.services || []).length > 0 ? (
@@ -1387,7 +1451,24 @@ function SearchResults({
 }) {
   const { currency } = useCurrency();
   const { language, t } = useLanguage();
-  const [detailsMaison, setDetailsMaison] = useState<MaisonListItem | null>(null);
+  const [detailsMaison, setDetailsMaison] = useState<DialogMaison | null>(null);
+
+  const handleOpenDetails = async (maison: MaisonListItem) => {
+    setDetailsMaison(maison);
+
+    try {
+      const context = await fetchPublicBookingContext(maison.id);
+      const photos = context.maison.photos || [];
+
+      if (photos.length > 0) {
+        setDetailsMaison((current) =>
+          current && current.id === maison.id ? { ...current, photos } : current
+        );
+      }
+    } catch {
+      // Keep fallback with primary photo only.
+    }
+  };
 
   if (!criteria) {
     return null;
@@ -1605,7 +1686,7 @@ function SearchResults({
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => setDetailsMaison(maison)}
+                            onClick={() => void handleOpenDetails(maison)}
                             className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:bg-[#f7f2ea]"
                           >
                             {t.results.details}
@@ -1725,7 +1806,24 @@ function Houses({
   const { currency } = useCurrency();
   const { t } = useLanguage();
   const featured = maisons.slice(0, 6);
-  const [detailsMaison, setDetailsMaison] = useState<MaisonListItem | null>(null);
+  const [detailsMaison, setDetailsMaison] = useState<DialogMaison | null>(null);
+
+  const handleOpenDetails = async (maison: MaisonListItem) => {
+    setDetailsMaison(maison);
+
+    try {
+      const context = await fetchPublicBookingContext(maison.id);
+      const photos = context.maison.photos || [];
+
+      if (photos.length > 0) {
+        setDetailsMaison((current) =>
+          current && current.id === maison.id ? { ...current, photos } : current
+        );
+      }
+    } catch {
+      // Keep fallback with primary photo only.
+    }
+  };
 
   return (
     <section id="maisons" className="relative py-24 lg:py-32" style={{ background: "color-mix(in oklab, var(--sand) 55%, var(--cream))" }}>
@@ -1815,7 +1913,7 @@ function Houses({
                       </div>
                       <button
                         type="button"
-                        onClick={() => setDetailsMaison(maison)}
+                        onClick={() => void handleOpenDetails(maison)}
                         className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition"
                         style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
                       >

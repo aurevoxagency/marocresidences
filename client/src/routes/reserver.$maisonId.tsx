@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   BedDouble,
   CalendarDays,
   CheckCircle2,
@@ -97,6 +98,32 @@ function pickChambreForAdults(chambres: ChambreListItem[], adults: number) {
   }
 
   return String(chambres[0].id);
+}
+
+function pickChambreOptionsForAdults(chambres: ChambreListItem[], adults: number) {
+  if (chambres.length === 0) {
+    return [];
+  }
+
+  const target = normalizeTypeNom(roomTypeForAdults(adults));
+  const byType = chambres
+    .filter((chambre) => normalizeTypeNom(chambre.type_nom) === target)
+    .sort((a, b) => Number(a.prix_adulte ?? 0) - Number(b.prix_adulte ?? 0));
+
+  if (byType.length > 0) {
+    return byType;
+  }
+
+  const exactCap = chambres.filter((chambre) => Number(chambre.capacite_max) === adults);
+  if (exactCap.length > 0) {
+    return exactCap.sort((a, b) => Number(a.prix_adulte ?? 0) - Number(b.prix_adulte ?? 0));
+  }
+
+  const larger = [...chambres]
+    .filter((chambre) => Number(chambre.capacite_max) >= adults)
+    .sort((a, b) => Number(a.capacite_max) - Number(b.capacite_max));
+
+  return larger.slice(0, 3); // show only a few fallbacks if type match isn't available
 }
 
 type BookingSearch = {
@@ -335,7 +362,9 @@ function ReserverPage() {
       return;
     }
 
-    setChambreId(pickChambreForAdults(context.chambres, search.adults));
+    const options = pickChambreOptionsForAdults(context.chambres, search.adults);
+    const first = options[0];
+    setChambreId(first ? String(first.id) : "");
   }, [context, search.adults]);
 
   useEffect(() => {
@@ -368,6 +397,16 @@ function ReserverPage() {
   );
 
   const expectedRoomType = roomTypeForAdults(search.adults);
+  const chambreOptions = useMemo(() => {
+    if (!context) {
+      return [];
+    }
+    return pickChambreOptionsForAdults(context.chambres, search.adults);
+  }, [context, search.adults]);
+
+  const currentOptionIndex = useMemo(() => {
+    return chambreOptions.findIndex((c) => String(c.id) === chambreId);
+  }, [chambreOptions, chambreId]);
   const litsBebeRestants = context?.maison.lits_bebe_disponibles
     ? Math.max(0, Number(context.maison.nb_lits_bebe) || 0)
     : 0;
@@ -386,6 +425,31 @@ function ReserverPage() {
   const nbEnfants = occupants.filter((item) => item.type_occupant === "enfant").length;
   const nbBebes = occupants.filter((item) => item.type_occupant === "bebe").length;
   const devise = context?.maison.devise || "MAD";
+  const supplementsLabel = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        occupants
+          .map((occupant) =>
+            supplements.find((item) => String(item.id) === occupant.supplement_id)?.nom
+          )
+          .filter((name): name is string => Boolean(name))
+      )
+    );
+
+    return names.length > 0 ? ` (${names.join(", ")})` : "";
+  }, [occupants, supplements]);
+
+  const formatPerNight = useCallback(
+    (amount: number) => {
+      if (nbNuits <= 0 || amount <= 0) {
+        return null;
+      }
+
+      const perNight = Math.round((amount / nbNuits) * 100) / 100;
+      return `${perNight.toLocaleString("fr-FR")} ${devise} / nuit`;
+    },
+    [devise, nbNuits]
+  );
 
   const getOccupantSupplementAmount = (occupant: OccupantDraft) => {
     if (!occupant.supplement_id) {
@@ -989,7 +1053,69 @@ function ReserverPage() {
                       Aucune chambre {expectedRoomType} disponible pour cette maison.
                     </p>
                   ) : (
-                    <div className="w-full rounded-2xl border border-[color:var(--olive-deep)] bg-[#f4f7f0] px-4 py-4">
+                    <div className="w-full space-y-3 rounded-2xl border border-[color:var(--olive-deep)] bg-[#f4f7f0] px-4 py-4">
+                      {chambreOptions.length > 1 && currentOptionIndex >= 0 ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs text-muted-foreground">
+                            Choix chambre · {currentOptionIndex + 1}/{chambreOptions.length}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const nextIndex = Math.max(0, currentOptionIndex - 1);
+                                const next = chambreOptions[nextIndex];
+                                if (next) {
+                                  setChambreId(String(next.id));
+                                }
+                              }}
+                              disabled={currentOptionIndex <= 0}
+                            >
+                              <ArrowLeft className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const nextIndex = Math.min(
+                                  chambreOptions.length - 1,
+                                  currentOptionIndex + 1
+                                );
+                                const next = chambreOptions[nextIndex];
+                                if (next) {
+                                  setChambreId(String(next.id));
+                                }
+                              }}
+                              disabled={currentOptionIndex >= chambreOptions.length - 1}
+                            >
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {chambreOptions.length > 1 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {chambreOptions.map((opt, idx) => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setChambreId(String(opt.id))}
+                              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                                String(opt.id) === chambreId
+                                  ? "border-[color:var(--olive-deep)] bg-white text-[color:var(--olive-deep)]"
+                                  : "border-black/10 bg-white/60 text-muted-foreground hover:bg-white"
+                              }`}
+                            >
+                              {opt.nom}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-semibold" style={{ color: "var(--ink)" }}>
@@ -1290,14 +1416,28 @@ function ReserverPage() {
 
                   <div className="space-y-2.5">
                     <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Adultes</span>
+                      <div>
+                        <span className="text-muted-foreground">Adultes</span>
+                        {formatPerNight(pricing.prixChambre) ? (
+                          <p className="text-[11px] text-muted-foreground/80">
+                            {formatPerNight(pricing.prixChambre)}
+                          </p>
+                        ) : null}
+                      </div>
                       <span className="font-medium">
                         {pricing.prixChambre.toLocaleString("fr-FR")} {devise}
                       </span>
                     </div>
                     {nbEnfants > 0 ? (
                       <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Enfants</span>
+                        <div>
+                          <span className="text-muted-foreground">Enfants</span>
+                          {formatPerNight(pricing.prixEnfants) ? (
+                            <p className="text-[11px] text-muted-foreground/80">
+                              {formatPerNight(pricing.prixEnfants)}
+                            </p>
+                          ) : null}
+                        </div>
                         <span className="font-medium">
                           {pricing.prixEnfants.toLocaleString("fr-FR")} {devise}
                         </span>
@@ -1305,7 +1445,14 @@ function ReserverPage() {
                     ) : null}
                     {nbBebes > 0 ? (
                       <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Bébés</span>
+                        <div>
+                          <span className="text-muted-foreground">Bébés</span>
+                          {formatPerNight(pricing.prixBebe) ? (
+                            <p className="text-[11px] text-muted-foreground/80">
+                              {formatPerNight(pricing.prixBebe)}
+                            </p>
+                          ) : null}
+                        </div>
                         <span className="font-medium">
                           {pricing.prixBebe.toLocaleString("fr-FR")} {devise}
                         </span>
@@ -1319,7 +1466,14 @@ function ReserverPage() {
                     ) : null}
                     {pricing.supplementTotal > 0 ? (
                       <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Suppléments</span>
+                        <div>
+                          <span className="text-muted-foreground">Suppléments{supplementsLabel}</span>
+                          {formatPerNight(pricing.supplementTotal) ? (
+                            <p className="text-[11px] text-muted-foreground/80">
+                              {formatPerNight(pricing.supplementTotal)}
+                            </p>
+                          ) : null}
+                        </div>
                         <span className="font-medium">
                           {pricing.supplementTotal.toLocaleString("fr-FR")} {devise}
                         </span>
@@ -1349,7 +1503,14 @@ function ReserverPage() {
                     ) : null}
                     {pricing.totals.taxe_sejour_montant > 0 ? (
                       <div className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">Taxe de séjour</span>
+                        <div>
+                          <span className="text-muted-foreground">Taxe de séjour</span>
+                          {formatPerNight(pricing.totals.taxe_sejour_montant) ? (
+                            <p className="text-[11px] text-muted-foreground/80">
+                              {formatPerNight(pricing.totals.taxe_sejour_montant)}
+                            </p>
+                          ) : null}
+                        </div>
                         <span className="font-medium">
                           {pricing.totals.taxe_sejour_montant.toLocaleString("fr-FR")} {devise}
                         </span>

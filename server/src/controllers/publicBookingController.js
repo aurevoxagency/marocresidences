@@ -296,6 +296,16 @@ async function getBookingContext(req, res) {
       [maisonId]
     );
 
+    const [photos] = await pool.query(
+      `
+        SELECT url, legende, est_principale, ordre
+        FROM photos
+        WHERE maison_id = ?
+        ORDER BY est_principale DESC, ordre ASC, id ASC
+      `,
+      [maisonId]
+    );
+
     const [tranchesAge] = await pool.query(
       "SELECT id, nom, age_min, age_max FROM tranches_age ORDER BY age_min ASC"
     );
@@ -357,6 +367,7 @@ async function getBookingContext(req, res) {
     return res.status(200).json({
       maison: {
         ...maisonRows[0],
+        photos,
         lits_bebe_disponibles: Boolean(
           maisonRows[0].lits_bebe_disponibles === true ||
             maisonRows[0].lits_bebe_disponibles === 1

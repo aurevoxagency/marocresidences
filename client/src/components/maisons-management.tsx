@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, ImagePlus, MoreVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  ImagePlus,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
 
 import {
   AlertDialog,
@@ -196,7 +206,7 @@ function ZoomableImage({
   return (
     <button
       type="button"
-      className="block overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c4b5fd]"
+      className="block h-full w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c4b5fd]"
       onMouseEnter={() => onPreview(resolvedSrc)}
       onMouseLeave={() => onPreview(null)}
       onFocus={() => onPreview(resolvedSrc)}
@@ -206,7 +216,7 @@ function ZoomableImage({
       <img
         src={resolvedSrc}
         alt={alt}
-        className={`object-cover transition duration-200 hover:scale-105 ${className || ""}`}
+        className={`h-full w-full object-cover transition duration-200 hover:scale-105 ${className || ""}`}
       />
     </button>
   );
@@ -360,6 +370,7 @@ export function MaisonsManagement() {
   const [viewMaison, setViewMaison] = useState<MaisonDetail | null>(null);
   const [loadingView, setLoadingView] = useState(false);
   const [hoveredPhoto, setHoveredPhoto] = useState<string | null>(null);
+  const [viewPhotoIndex, setViewPhotoIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [filterStatut, setFilterStatut] = useState<string>("all");
   const [filterVille, setFilterVille] = useState<string>("all");
@@ -467,6 +478,11 @@ export function MaisonsManagement() {
     try {
       const detail = await fetchMaison(maison.id);
       setViewMaison(detail);
+      const initialIndex = Math.max(
+        0,
+        detail.photos.findIndex((photo) => Boolean(photo.est_principale))
+      );
+      setViewPhotoIndex(initialIndex);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossible de charger la fiche.");
       setViewOpen(false);
@@ -1364,6 +1380,7 @@ export function MaisonsManagement() {
           setViewOpen(open);
           if (!open) {
             setHoveredPhoto(null);
+            setViewPhotoIndex(0);
           }
         }}
       >
@@ -1377,23 +1394,65 @@ export function MaisonsManagement() {
           ) : viewMaison ? (
             <div className="space-y-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                {viewMaison.photos[0] || viewMaison.photo_principale ? (
-                  <ZoomableImage
-                    src={
-                      viewMaison.photos.find((photo) => photo.est_principale)?.url ||
-                      viewMaison.photos[0]?.url ||
-                      viewMaison.photo_principale ||
-                      ""
-                    }
-                    alt={viewMaison.nom}
-                    className="h-40 w-full rounded-2xl sm:h-36 sm:w-48"
-                    onPreview={setHoveredPhoto}
-                  />
-                ) : (
-                  <div className="grid h-36 w-full place-items-center rounded-2xl bg-slate-100 text-sm text-slate-400 sm:w-48">
-                    Aucune photo
-                  </div>
-                )}
+                <div className="w-full sm:w-48">
+                  {viewMaison.photos[0] || viewMaison.photo_principale ? (
+                    <div className="relative">
+                      <ZoomableImage
+                        src={
+                          viewMaison.photos[viewPhotoIndex]?.url ||
+                          viewMaison.photos.find((photo) => photo.est_principale)?.url ||
+                          viewMaison.photos[0]?.url ||
+                          viewMaison.photo_principale ||
+                          ""
+                        }
+                        alt={viewMaison.nom}
+                        className="h-40 w-full rounded-2xl sm:h-36 sm:w-48"
+                        onPreview={setHoveredPhoto}
+                      />
+
+                      {viewMaison.photos.length > 1 ? (
+                        <>
+                          <button
+                            type="button"
+                            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/80 p-1 shadow-sm backdrop-blur transition hover:bg-white"
+                            onClick={() =>
+                              setViewPhotoIndex((current) => {
+                                const len = viewMaison.photos.length;
+                                return (current - 1 + len) % len;
+                              })
+                            }
+                            aria-label="Photo précédente"
+                          >
+                            <ChevronLeft className="h-5 w-5 text-slate-800" />
+                          </button>
+                          <button
+                            type="button"
+                            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/80 p-1 shadow-sm backdrop-blur transition hover:bg-white"
+                            onClick={() =>
+                              setViewPhotoIndex((current) => {
+                                const len = viewMaison.photos.length;
+                                return (current + 1) % len;
+                              })
+                            }
+                            aria-label="Photo suivante"
+                          >
+                            <ChevronRight className="h-5 w-5 text-slate-800" />
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="grid h-36 w-full place-items-center rounded-2xl bg-slate-100 text-sm text-slate-400 sm:w-48">
+                      Aucune photo
+                    </div>
+                  )}
+
+                  {viewMaison.photos[viewPhotoIndex]?.legende ? (
+                    <p className="mt-2 line-clamp-2 text-[11px] text-slate-500">
+                      {viewMaison.photos[viewPhotoIndex]?.legende}
+                    </p>
+                  ) : null}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-xl font-semibold text-slate-900">{viewMaison.nom}</h3>
@@ -1517,7 +1576,22 @@ export function MaisonsManagement() {
                   <h4 className="mb-2 text-sm font-semibold text-slate-800">Photos</h4>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {viewMaison.photos.map((photo, index) => (
-                      <div key={photo.id || index} className="overflow-hidden rounded-xl border border-slate-200">
+                      <div
+                        key={photo.id || index}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setViewPhotoIndex(index)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            setViewPhotoIndex(index);
+                          }
+                        }}
+                        className={`cursor-pointer overflow-hidden rounded-xl border ${
+                          index === viewPhotoIndex
+                            ? "border-indigo-500 ring-1 ring-indigo-200"
+                            : "border-slate-200"
+                        }`}
+                      >
                         <ZoomableImage
                           src={photo.url}
                           alt={photo.legende || viewMaison.nom}
