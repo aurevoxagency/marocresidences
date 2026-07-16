@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import logo from "@/assets/header-maroc-residences-removebg-preview.png";
-import loaderVideo from "@/assets/5442715-hd_1920_1080_25fps.mp4";
+import loaderVideo from "@/assets/15296840_1920_1080_30fps.mp4";
 
 const STAGES = [
   { progress: 0, label: "Préparation de votre séjour" },
@@ -81,12 +81,12 @@ export function AppSplashLoader({ children }: { children: ReactNode }) {
             <source src={loaderVideo} type="video/mp4" />
           </video>
 
-          <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/50 to-black/85" />
+          <div className="absolute inset-0 bg-black/40" />
           <div
             className="pointer-events-none absolute inset-0"
             style={{
               backgroundImage:
-                "radial-gradient(ellipse 70% 45% at 50% 35%, rgba(180, 70, 50, 0.22), transparent 65%), radial-gradient(ellipse 50% 35% at 85% 85%, rgba(212, 140, 50, 0.18), transparent 55%)",
+                "radial-gradient(ellipse 70% 45% at 50% 35%, rgba(180, 70, 50, 0.12), transparent 65%), radial-gradient(ellipse 50% 35% at 85% 85%, rgba(212, 140, 50, 0.1), transparent 55%)",
             }}
           />
           <div
