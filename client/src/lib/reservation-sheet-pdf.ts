@@ -4,6 +4,8 @@ import { resolvePhotoUrl, type MaisonDetail, type MaisonListItem } from "@/lib/m
 import {
   computeMontantReduction,
   type Reservation,
+  MODE_PAIEMENT_LABELS,
+  type ReservationModePaiement,
   type ReservationSource,
   type ReservationStatut,
   type ReservationStatutPaiement,
@@ -649,6 +651,16 @@ export async function downloadReservationSheetPdf(
           Number(reservation.prix_total_ttc) + Number(reservation.taxe_sejour_montant || 0)
         ),
         highlight: true,
+      },
+      {
+        label: "Mode de paiement",
+        amount: reservation.mode_paiement
+          ? MODE_PAIEMENT_LABELS[reservation.mode_paiement as ReservationModePaiement]
+          : "—",
+      },
+      {
+        label: "Statut paiement",
+        amount: PAIEMENT_LABELS[reservation.statut_paiement],
       },
       { label: "Montant payé", amount: formatMoney(reservation.montant_paye) },
     ],

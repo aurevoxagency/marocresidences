@@ -17,6 +17,7 @@ import {
 import logo from "@/assets/header-maroc-residences-removebg-preview.png";
 import { AuthDialog } from "@/components/auth-dialog";
 import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { fetchCurrentUser, getAuthToken } from "@/lib/auth";
 import { resolvePhotoUrl } from "@/lib/maisons";
 import {
@@ -34,7 +35,9 @@ import {
   calculateOccupantSupplementStayTotal,
   calculateReservationTotals,
   countTaxeSejourAssujettis,
+  MODE_PAIEMENT_LABELS,
   resolveTrancheAgeId,
+  type ReservationModePaiement,
   type ReservationOccupantType,
   type ReservationTypeReduction,
 } from "@/lib/reservations";
@@ -259,6 +262,7 @@ function ReserverPage() {
   const [prenom, setPrenom] = useState("");
   const [email, setEmail] = useState("");
   const [telephone, setTelephone] = useState("");
+  const [modePaiement, setModePaiement] = useState<ReservationModePaiement>("a_la_livraison");
   const [notes, setNotes] = useState("");
   const [promoCodeInput, setPromoCodeInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<PublicPromoCode | null>(null);
@@ -695,6 +699,11 @@ function ReserverPage() {
       return;
     }
 
+    if (!modePaiement) {
+      setFormError("Veuillez choisir un mode de paiement.");
+      return;
+    }
+
     for (const occupant of occupants) {
       if (!occupant.nom.trim() || !occupant.prenom.trim()) {
         setFormError("Chaque voyageur doit avoir un nom et un prénom.");
@@ -768,6 +777,7 @@ function ReserverPage() {
         montant_tva: pricing.totals.montant_tva,
         prix_total_ttc: pricing.totals.prix_total_ttc,
         taxe_sejour_montant: pricing.totals.taxe_sejour_montant,
+        mode_paiement: modePaiement,
         notes: notesParts.length > 0 ? notesParts.join(" · ") : null,
         client: {
           civilite,
@@ -1371,6 +1381,33 @@ function ReserverPage() {
                   })}
                 </div>
 
+                <section className="mt-5 space-y-3">
+                  <p className="text-sm font-medium">Mode de paiement</p>
+                  <RadioGroup
+                    value={modePaiement}
+                    onValueChange={(value) => setModePaiement(value as ReservationModePaiement)}
+                    className="grid gap-3 sm:grid-cols-2"
+                  >
+                    {(Object.entries(MODE_PAIEMENT_LABELS) as [ReservationModePaiement, string][]).map(
+                      ([value, label]) => (
+                        <label
+                          key={value}
+                          htmlFor={`reserve-mode-${value}`}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition",
+                            modePaiement === value
+                              ? "border-[color:var(--olive-deep)] bg-[color-mix(in_oklab,var(--olive-deep)_8%,white)]"
+                              : "border-input bg-background hover:border-[color-mix(in_oklab,var(--olive-deep)_25%,var(--border))]"
+                          )}
+                        >
+                          <RadioGroupItem value={value} id={`reserve-mode-${value}`} />
+                          <span className="text-sm font-medium">{label}</span>
+                        </label>
+                      )
+                    )}
+                  </RadioGroup>
+                </section>
+
                 <label className="mt-5 block space-y-2 text-sm">
                   <span className="font-medium">Notes (optionnel)</span>
                   <textarea
@@ -1580,6 +1617,15 @@ function ReserverPage() {
                         {promoError}
                       </p>
                     ) : null}
+                  </div>
+
+                  <div className="border-t border-black/5 pt-4">
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Paiement</span>
+                      <span className="text-right font-medium">
+                        {MODE_PAIEMENT_LABELS[modePaiement]}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="border-t border-black/5 pt-4">

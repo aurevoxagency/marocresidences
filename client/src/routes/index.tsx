@@ -196,6 +196,7 @@ function MaisonDetailsDialog({
   const { currency } = useCurrency();
   const { t } = useLanguage();
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [hoverPreview, setHoverPreview] = useState(false);
   const maisonPhotos = useMemo(() => {
     if (!maison) {
       return [];
@@ -217,13 +218,35 @@ function MaisonDetailsDialog({
 
   useEffect(() => {
     setPhotoIndex(0);
+    setHoverPreview(false);
   }, [maison?.id]);
+
+  const currentPhoto =
+    maisonPhotos[photoIndex] ||
+    (maison ? resolvePhotoUrl(maison.photo_principale) || house1 : house1);
+
+  const showPrevPhoto = () => {
+    if (maisonPhotos.length <= 1) {
+      return;
+    }
+
+    setPhotoIndex((current) => (current - 1 + maisonPhotos.length) % maisonPhotos.length);
+  };
+
+  const showNextPhoto = () => {
+    if (maisonPhotos.length <= 1) {
+      return;
+    }
+
+    setPhotoIndex((current) => (current + 1) % maisonPhotos.length);
+  };
 
   return (
     <Dialog
       open={Boolean(maison)}
       onOpenChange={(open) => {
         if (!open) {
+          setHoverPreview(false);
           onClose();
         }
       }}
@@ -231,20 +254,22 @@ function MaisonDetailsDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-2xl">
         {maison ? (
           <>
-            <div className="relative h-48 w-full overflow-hidden sm:h-56">
+            <div
+              className="group relative h-48 w-full cursor-zoom-in overflow-hidden sm:h-56"
+              onMouseEnter={() => setHoverPreview(true)}
+              onMouseLeave={() => setHoverPreview(false)}
+            >
               <img
-                src={maisonPhotos[photoIndex] || resolvePhotoUrl(maison.photo_principale) || house1}
+                src={currentPhoto}
                 alt={maison.nom}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
               {maisonPhotos.length > 1 ? (
                 <>
                   <button
                     type="button"
-                    onClick={() =>
-                      setPhotoIndex((current) => (current - 1 + maisonPhotos.length) % maisonPhotos.length)
-                    }
+                    onClick={showPrevPhoto}
                     className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/35 p-1.5 text-white backdrop-blur transition hover:bg-black/50"
                     aria-label="Photo précédente"
                   >
@@ -252,12 +277,15 @@ function MaisonDetailsDialog({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPhotoIndex((current) => (current + 1) % maisonPhotos.length)}
+                    onClick={showNextPhoto}
                     className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/35 p-1.5 text-white backdrop-blur transition hover:bg-black/50"
                     aria-label="Photo suivante"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
+                  <div className="absolute bottom-3 right-3 z-10 rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur">
+                    {photoIndex + 1} / {maisonPhotos.length}
+                  </div>
                 </>
               ) : null}
               <div className="absolute inset-x-0 bottom-0 p-5 text-white">
@@ -283,14 +311,28 @@ function MaisonDetailsDialog({
                     key={`${photo}-${index}`}
                     type="button"
                     onClick={() => setPhotoIndex(index)}
-                    className={`h-16 w-24 shrink-0 overflow-hidden rounded-lg border transition ${
+                    className={`group h-16 w-24 shrink-0 overflow-hidden rounded-lg border transition ${
                       photoIndex === index ? "border-[#3f5b2d]" : "border-black/10"
                     }`}
                     aria-label={`Photo ${index + 1}`}
                   >
-                    <img src={photo} alt={`${maison.nom} ${index + 1}`} className="h-full w-full object-cover" />
+                    <img
+                      src={photo}
+                      alt={`${maison.nom} ${index + 1}`}
+                      className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
+                    />
                   </button>
                 ))}
+              </div>
+            ) : null}
+
+            {hoverPreview ? (
+              <div className="pointer-events-none fixed inset-0 z-[200] flex items-center justify-center bg-black/35 p-6">
+                <img
+                  src={currentPhoto}
+                  alt=""
+                  className="max-h-[70vh] max-w-[min(70vw,28rem)] rounded-2xl object-contain shadow-2xl ring-4 ring-white"
+                />
               </div>
             ) : null}
 

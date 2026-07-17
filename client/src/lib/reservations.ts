@@ -24,6 +24,13 @@ export type ReservationStatutPaiement =
   | "paye_totalement"
   | "rembourse";
 
+export type ReservationModePaiement = "en_ligne" | "a_la_livraison";
+
+export const MODE_PAIEMENT_LABELS: Record<ReservationModePaiement, string> = {
+  en_ligne: "Paiement en ligne",
+  a_la_livraison: "Paiement à la livraison",
+};
+
 export type ReservationTypeReduction = "%" | "MAD";
 
 export type ReservationOccupantType = "adulte" | "enfant" | "bebe";
@@ -91,6 +98,7 @@ export type Reservation = {
   taxe_sejour_montant?: number | string;
   statut_reservation: ReservationStatut;
   statut_paiement: ReservationStatutPaiement;
+  mode_paiement?: ReservationModePaiement | null;
   montant_paye: number | string;
   notes: string | null;
   date_creation: string;
@@ -131,6 +139,7 @@ export type ReservationFormData = {
   taxe_sejour_montant?: number;
   statut_reservation?: ReservationStatut;
   statut_paiement?: ReservationStatutPaiement;
+  mode_paiement?: ReservationModePaiement | null;
   montant_paye?: number;
   notes?: string | null;
   occupants?: ReservationOccupantFormData[];

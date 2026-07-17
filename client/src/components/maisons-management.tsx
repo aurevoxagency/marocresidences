@@ -206,7 +206,7 @@ function ZoomableImage({
   return (
     <button
       type="button"
-      className="block h-full w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c4b5fd]"
+      className={`block shrink-0 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c4b5fd] ${className || ""}`}
       onMouseEnter={() => onPreview(resolvedSrc)}
       onMouseLeave={() => onPreview(null)}
       onFocus={() => onPreview(resolvedSrc)}
@@ -216,7 +216,7 @@ function ZoomableImage({
       <img
         src={resolvedSrc}
         alt={alt}
-        className={`h-full w-full object-cover transition duration-200 hover:scale-105 ${className || ""}`}
+        className="h-full w-full object-cover transition duration-200 hover:scale-105"
       />
     </button>
   );

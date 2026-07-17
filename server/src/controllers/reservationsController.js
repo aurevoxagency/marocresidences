@@ -25,6 +25,8 @@ const STATUTS_PAIEMENT = new Set([
   "rembourse",
 ]);
 
+const MODES_PAIEMENT = new Set(["en_ligne", "a_la_livraison"]);
+
 const TYPES_REDUCTION = new Set(["%", "MAD"]);
 
 function emptyToNull(value) {
@@ -197,6 +199,7 @@ function pickReservationFields(body = {}) {
     statut_paiement: STATUTS_PAIEMENT.has(body.statut_paiement)
       ? body.statut_paiement
       : "non_paye",
+    mode_paiement: MODES_PAIEMENT.has(body.mode_paiement) ? body.mode_paiement : null,
     montant_paye: toDecimalOrDefault(body.montant_paye, 0),
     notes: emptyToNull(body.notes?.trim()),
   };
@@ -659,8 +662,8 @@ async function createReservation(req, res) {
           source, promotion_id, code_promo, type_reduction, valeur_reduction, supplement_id,
           prix_chambre_total, prix_bebe_total, prix_enfants_total,
           prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc, taxe_sejour_montant,
-          statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          statut_reservation, statut_paiement, mode_paiement, montant_paye, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -691,6 +694,7 @@ async function createReservation(req, res) {
         fields.taxe_sejour_montant,
         fields.statut_reservation,
         fields.statut_paiement,
+        fields.mode_paiement,
         fields.montant_paye,
         fields.notes,
       ]
@@ -776,7 +780,7 @@ async function updateReservation(req, res) {
           source = ?, promotion_id = ?, code_promo = ?, type_reduction = ?, valeur_reduction = ?, supplement_id = ?,
           prix_chambre_total = ?, prix_bebe_total = ?, prix_enfants_total = ?,
           prix_total_ht = ?, taux_tva_applique = ?, montant_tva = ?, prix_total_ttc = ?, taxe_sejour_montant = ?,
-          statut_reservation = ?, statut_paiement = ?, montant_paye = ?, notes = ?
+          statut_reservation = ?, statut_paiement = ?, mode_paiement = ?, montant_paye = ?, notes = ?
         WHERE id = ?
       `,
       [
@@ -807,6 +811,7 @@ async function updateReservation(req, res) {
         fields.taxe_sejour_montant,
         fields.statut_reservation,
         fields.statut_paiement,
+        fields.mode_paiement,
         fields.montant_paye,
         fields.notes,
         id,
@@ -956,6 +961,7 @@ async function createPublicReservation(req, res) {
       source: "site_web",
       statut_reservation: "en_attente",
       statut_paiement: "non_paye",
+      mode_paiement: req.body.mode_paiement,
       montant_paye: 0,
       promotion_id: req.body.promotion_id ?? null,
       code_promo: req.body.code_promo ?? null,
@@ -972,6 +978,12 @@ async function createPublicReservation(req, res) {
         [fields.promotion_id]
       );
       fields.code_promo = normalizeCodePromo(promoRows[0]?.code_promo);
+    }
+
+    if (!MODES_PAIEMENT.has(fields.mode_paiement)) {
+      return res.status(400).json({
+        message: "Veuillez choisir un mode de paiement.",
+      });
     }
 
     const occupants = pickOccupants(req.body);
@@ -1032,8 +1044,8 @@ async function createPublicReservation(req, res) {
           source, promotion_id, code_promo, type_reduction, valeur_reduction, supplement_id,
           prix_chambre_total, prix_bebe_total, prix_enfants_total,
           prix_total_ht, taux_tva_applique, montant_tva, prix_total_ttc, taxe_sejour_montant,
-          statut_reservation, statut_paiement, montant_paye, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          statut_reservation, statut_paiement, mode_paiement, montant_paye, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         reference,
@@ -1064,6 +1076,7 @@ async function createPublicReservation(req, res) {
         fields.taxe_sejour_montant,
         fields.statut_reservation,
         fields.statut_paiement,
+        fields.mode_paiement,
         fields.montant_paye,
         fields.notes,
       ]

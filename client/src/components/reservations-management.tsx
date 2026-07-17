@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -86,10 +87,12 @@ import {
   deleteReservation,
   fetchReservation,
   fetchReservations,
+  MODE_PAIEMENT_LABELS,
   resolveTrancheAgeId,
   updateReservation,
   type Reservation,
   type ReservationFormData,
+  type ReservationModePaiement,
   type ReservationOccupantFormData,
   type ReservationOccupantType,
   type ReservationSource,
@@ -374,6 +377,7 @@ type FormState = {
   taux_tva_applique: string;
   statut_reservation: ReservationStatut;
   statut_paiement: ReservationStatutPaiement;
+  mode_paiement: ReservationModePaiement;
   montant_paye: string;
   notes: string;
 };
@@ -400,6 +404,7 @@ function emptyForm(maisonId = ""): FormState {
     taux_tva_applique: "10",
     statut_reservation: "en_attente",
     statut_paiement: "non_paye",
+    mode_paiement: "a_la_livraison",
     montant_paye: "0",
     notes: "",
   };
@@ -477,6 +482,7 @@ function toFormState(reservation: Reservation): FormState {
     taux_tva_applique: String(reservation.taux_tva_applique),
     statut_reservation: reservation.statut_reservation,
     statut_paiement: reservation.statut_paiement,
+    mode_paiement: reservation.mode_paiement || "a_la_livraison",
     montant_paye: String(reservation.montant_paye),
     notes: reservation.notes || "",
   };
@@ -1006,6 +1012,7 @@ export function ReservationsManagement() {
         prix_total_ttc: Number(detailed.prix_total_ttc) || 0,
         statut_reservation: "confirmee",
         statut_paiement: detailed.statut_paiement,
+        mode_paiement: detailed.mode_paiement ?? null,
         montant_paye: Number(detailed.montant_paye) || 0,
         notes: detailed.notes,
         occupants: (detailed.occupants || []).map((occupant) => ({
@@ -1274,6 +1281,7 @@ export function ReservationsManagement() {
       taxe_sejour_montant: computedTotals.taxe_sejour_montant,
       statut_reservation: form.statut_reservation,
       statut_paiement: form.statut_paiement,
+      mode_paiement: form.mode_paiement,
       montant_paye: Number(form.montant_paye) || 0,
       notes: form.notes.trim() || null,
       occupants: occupantsPayload,
@@ -1783,6 +1791,37 @@ export function ReservationsManagement() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-3 sm:col-span-2">
+                <Label>Mode de paiement</Label>
+                <RadioGroup
+                  value={form.mode_paiement}
+                  onValueChange={(value) =>
+                    setForm((c) => ({
+                      ...c,
+                      mode_paiement: value as ReservationModePaiement,
+                    }))
+                  }
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  {(Object.entries(MODE_PAIEMENT_LABELS) as [ReservationModePaiement, string][]).map(
+                    ([value, label]) => (
+                      <label
+                        key={value}
+                        htmlFor={`mode-paiement-${value}`}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                          form.mode_paiement === value
+                            ? "border-indigo-300 bg-indigo-50"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <RadioGroupItem value={value} id={`mode-paiement-${value}`} />
+                        <span className="text-sm font-medium text-slate-800">{label}</span>
+                      </label>
+                    )
+                  )}
+                </RadioGroup>
               </div>
 
               <div className="space-y-2 sm:col-span-2">
@@ -2502,6 +2541,11 @@ export function ReservationsManagement() {
                     <Badge variant="outline">
                       {PAIEMENT_LABELS[viewReservation.statut_paiement]}
                     </Badge>
+                    {viewReservation.mode_paiement ? (
+                      <Badge variant="outline">
+                        {MODE_PAIEMENT_LABELS[viewReservation.mode_paiement]}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
 
@@ -2753,6 +2797,28 @@ export function ReservationsManagement() {
                       <span>Montant payé</span>
                       <span>{formatMoney(viewReservation.montant_paye)}</span>
                     </div>
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-900">Paiement</h3>
+                  <div className="grid gap-4 rounded-2xl border border-slate-200 p-4 sm:grid-cols-2">
+                    <FicheInfoItem
+                      label="Mode de paiement"
+                      value={
+                        viewReservation.mode_paiement
+                          ? MODE_PAIEMENT_LABELS[viewReservation.mode_paiement]
+                          : "—"
+                      }
+                    />
+                    <FicheInfoItem
+                      label="Statut paiement"
+                      value={PAIEMENT_LABELS[viewReservation.statut_paiement]}
+                    />
+                    <FicheInfoItem
+                      label="Montant payé"
+                      value={formatMoney(viewReservation.montant_paye)}
+                    />
                   </div>
                 </section>
 

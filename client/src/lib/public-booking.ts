@@ -2,6 +2,7 @@ import { getApiBaseUrl } from "@/lib/auth";
 import type { ChambreListItem, SupplementTarifRow } from "@/lib/hebergement";
 import type {
   Reservation,
+  ReservationModePaiement,
   ReservationOccupantFormData,
   ReservationTypeReduction,
 } from "@/lib/reservations";
@@ -95,6 +96,7 @@ export type PublicReservationPayload = {
   prix_total_ttc: number;
   taxe_sejour_montant?: number;
   notes?: string | null;
+  mode_paiement: ReservationModePaiement;
   client: PublicBookingClient;
   occupants: ReservationOccupantFormData[];
 };
