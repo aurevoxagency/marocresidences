@@ -262,7 +262,7 @@ function ReserverPage() {
   const [prenom, setPrenom] = useState("");
   const [email, setEmail] = useState("");
   const [telephone, setTelephone] = useState("");
-  const [modePaiement, setModePaiement] = useState<ReservationModePaiement>("a_la_livraison");
+  const [modePaiement, setModePaiement] = useState<ReservationModePaiement>("a_l_arrivee");
   const [notes, setNotes] = useState("");
   const [promoCodeInput, setPromoCodeInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<PublicPromoCode | null>(null);

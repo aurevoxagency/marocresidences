@@ -24,11 +24,11 @@ export type ReservationStatutPaiement =
   | "paye_totalement"
   | "rembourse";
 
-export type ReservationModePaiement = "en_ligne" | "a_la_livraison";
+export type ReservationModePaiement = "en_ligne" | "a_l_arrivee";
 
 export const MODE_PAIEMENT_LABELS: Record<ReservationModePaiement, string> = {
   en_ligne: "Paiement en ligne",
-  a_la_livraison: "Paiement à la livraison",
+  a_l_arrivee: "Paiement à l'arrivée",
 };
 
 export type ReservationTypeReduction = "%" | "MAD";

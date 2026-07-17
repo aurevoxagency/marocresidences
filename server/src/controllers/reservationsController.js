@@ -25,7 +25,7 @@ const STATUTS_PAIEMENT = new Set([
   "rembourse",
 ]);
 
-const MODES_PAIEMENT = new Set(["en_ligne", "a_la_livraison"]);
+const MODES_PAIEMENT = new Set(["en_ligne", "a_l_arrivee"]);
 
 const TYPES_REDUCTION = new Set(["%", "MAD"]);
 

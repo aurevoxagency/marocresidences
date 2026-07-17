@@ -1,9 +1,9 @@
 -- Ajoute le mode de paiement choisi sur les réservations
--- Valeurs : en_ligne | a_la_livraison
+-- Valeurs : en_ligne | a_l_arrivee
 -- Exécuter sur la base marocresidences
 
 ALTER TABLE reservations
-  ADD COLUMN mode_paiement ENUM('en_ligne', 'a_la_livraison') NULL DEFAULT NULL
+  ADD COLUMN mode_paiement ENUM('en_ligne', 'a_l_arrivee') NULL DEFAULT NULL
   AFTER statut_paiement;
 
 -- Optionnel : index utile pour les stats / filtres dashboard

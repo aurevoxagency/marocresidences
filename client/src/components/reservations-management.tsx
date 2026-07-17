@@ -404,7 +404,7 @@ function emptyForm(maisonId = ""): FormState {
     taux_tva_applique: "10",
     statut_reservation: "en_attente",
     statut_paiement: "non_paye",
-    mode_paiement: "a_la_livraison",
+    mode_paiement: "a_l_arrivee",
     montant_paye: "0",
     notes: "",
   };
@@ -482,7 +482,7 @@ function toFormState(reservation: Reservation): FormState {
     taux_tva_applique: String(reservation.taux_tva_applique),
     statut_reservation: reservation.statut_reservation,
     statut_paiement: reservation.statut_paiement,
-    mode_paiement: reservation.mode_paiement || "a_la_livraison",
+    mode_paiement: reservation.mode_paiement || "a_l_arrivee",
     montant_paye: String(reservation.montant_paye),
     notes: reservation.notes || "",
   };
