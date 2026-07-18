@@ -645,15 +645,15 @@ function Nav({
           <img
             src={logo}
             alt="Maroc Résidences"
-            className="h-9 w-auto max-w-[200px] object-contain sm:h-11 sm:max-w-[260px]"
+            className="h-12 w-auto max-w-[240px] object-contain sm:h-14 sm:max-w-[300px]"
           />
         </a>
 
-        <nav className="ml-2 hidden min-w-0 flex-1 items-center justify-center gap-6 text-sm text-foreground/80 lg:flex xl:gap-8">
+        <nav className="ml-2 hidden min-w-0 flex-1 items-center justify-center gap-6 text-base font-medium text-foreground/80 lg:flex xl:gap-8">
           <DropdownMenu modal={false}>
-            <DropdownMenuTrigger className="inline-flex shrink-0 items-center gap-1 opacity-80 outline-none transition-opacity hover:opacity-100 data-[state=open]:opacity-100">
+            <DropdownMenuTrigger className="inline-flex shrink-0 items-center gap-1.5 opacity-80 outline-none transition-opacity hover:opacity-100 data-[state=open]:opacity-100">
               {t.nav.destinations}
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-44">
               {destinations.length === 0 ? (
@@ -685,7 +685,7 @@ function Nav({
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger
               className={cn(
-                "group inline-flex h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold tracking-wide outline-none transition sm:h-9 sm:gap-1.5 sm:px-3 sm:text-xs",
+                "group inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold tracking-wide outline-none transition sm:h-10 sm:gap-2 sm:px-3.5 sm:text-sm",
                 "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)]",
                 "hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)]",
                 "focus-visible:ring-2 focus-visible:ring-[var(--olive)]/40",
@@ -693,9 +693,9 @@ function Nav({
               )}
               aria-label={t.nav.language}
             >
-              <Globe2 className="hidden h-3.5 w-3.5 text-[var(--olive-deep)] opacity-80 sm:block" />
+              <Globe2 className="h-4.5 w-4.5 text-[var(--olive-deep)] opacity-90 sm:h-5 sm:w-5" />
               <span>{language.toUpperCase()}</span>
-              <ChevronDown className="h-3 w-3 opacity-50 transition group-data-[state=open]:rotate-180" />
+              <ChevronDown className="h-3.5 w-3.5 opacity-50 transition group-data-[state=open]:rotate-180" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[7.5rem] rounded-xl p-1.5">
               {LANGUAGE_OPTIONS.map((option) => (
@@ -716,7 +716,7 @@ function Nav({
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger
               className={cn(
-                "group inline-flex h-8 items-center gap-1 rounded-full px-2 text-[11px] font-semibold tracking-wide outline-none transition sm:h-9 sm:gap-1.5 sm:px-3 sm:text-xs",
+                "group inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold tracking-wide outline-none transition sm:h-10 sm:gap-2 sm:px-3.5 sm:text-sm",
                 "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)]",
                 "hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)]",
                 "focus-visible:ring-2 focus-visible:ring-[var(--olive)]/40",
@@ -724,9 +724,9 @@ function Nav({
               )}
               aria-label={t.nav.currency}
             >
-              <CircleDollarSign className="hidden h-3.5 w-3.5 text-[var(--olive-deep)] opacity-80 sm:block" />
+              <CircleDollarSign className="h-4.5 w-4.5 text-[var(--olive-deep)] opacity-90 sm:h-5 sm:w-5" />
               <span>{currency}</span>
-              <ChevronDown className="h-3 w-3 opacity-50 transition group-data-[state=open]:rotate-180" />
+              <ChevronDown className="h-3.5 w-3.5 opacity-50 transition group-data-[state=open]:rotate-180" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[11rem] rounded-xl p-1.5">
               {CURRENCY_OPTIONS.map((option) => (
