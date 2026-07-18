@@ -81,6 +81,13 @@ const fr = {
     titleDestination: (city: string) => `Maisons à ${city}`,
     titleDefault: "Maisons d'hôtes disponibles",
     loading: "Recherche en cours…",
+    loadingSubtitle: "Nous sélectionnons les maisons d'hôtes qui correspondent à votre séjour.",
+    loadingStages: [
+      "Analyse de votre destination",
+      "Vérification des disponibilités",
+      "Sélection des meilleurs riads",
+      "Presque prêt…",
+    ],
     empty: "Aucune maison ne correspond à votre recherche.",
     capacityOk: "Capacité OK",
     verified: "Maison vérifiée",
@@ -146,6 +153,50 @@ const fr = {
         desc: "Une conciergerie francophone et arabophone disponible à toute heure, avant et pendant le séjour.",
       },
     ],
+  },
+  howItWorks: {
+    eyebrow: "Comment ça marche",
+    title: "Réservez votre séjour en trois étapes.",
+    subtitle: "Un parcours simple, clair et sécurisé — de la recherche à la confirmation.",
+    steps: [
+      {
+        title: "Choisissez votre destination",
+        desc: "Indiquez la ville, vos dates et le nombre de voyageurs. Nous affichons les maisons d’hôtes disponibles.",
+      },
+      {
+        title: "Sélectionnez votre maison",
+        desc: "Comparez photos, horaires, services et tarifs. Ouvrez la fiche pour voir tous les détails.",
+      },
+      {
+        title: "Confirmez votre réservation",
+        desc: "Choisissez le paiement en ligne ou à l’arrivée. Votre demande est envoyée, puis confirmée par l’équipe.",
+      },
+    ],
+    cta: "Lancer ma recherche",
+  },
+  practical: {
+    eyebrow: "Infos pratiques",
+    title: "Tout ce qu’il faut pour arriver serein.",
+    subtitle: "Les points essentiels avant, pendant et après votre séjour.",
+    items: [
+      {
+        title: "Paiement flexible",
+        desc: "Payez en ligne ou à l’arrivée selon l’option choisie lors de la réservation.",
+      },
+      {
+        title: "Check-in & check-out",
+        desc: "Les horaires sont indiqués sur chaque fiche. Arrivez un peu plus tôt ? Prévenez la maison.",
+      },
+      {
+        title: "Annulation claire",
+        desc: "Les conditions dépendent de la maison. Conservez votre référence pour toute modification.",
+      },
+      {
+        title: "Assistance dédiée",
+        desc: "Notre équipe vous accompagne avant et pendant le séjour, en français ou en anglais.",
+      },
+    ],
+    faqLink: "Voir la FAQ",
   },
   testimonials: {
     eyebrow: "Ils ont voyagé avec nous",
@@ -293,6 +344,13 @@ const en = {
     titleDestination: (city: string) => `Homes in ${city}`,
     titleDefault: "Available guesthouses",
     loading: "Searching…",
+    loadingSubtitle: "We're selecting the guesthouses that match your stay.",
+    loadingStages: [
+      "Analyzing your destination",
+      "Checking availability",
+      "Curating the finest riads",
+      "Almost ready…",
+    ],
     empty: "No homes match your search.",
     capacityOk: "Capacity OK",
     verified: "Verified home",
@@ -358,6 +416,50 @@ const en = {
         desc: "French and Arabic-speaking concierge available any time, before and during your stay.",
       },
     ],
+  },
+  howItWorks: {
+    eyebrow: "How it works",
+    title: "Book your stay in three steps.",
+    subtitle: "A simple, clear and secure path — from search to confirmation.",
+    steps: [
+      {
+        title: "Choose your destination",
+        desc: "Enter the city, your dates and travelers. We show available guesthouses.",
+      },
+      {
+        title: "Pick your home",
+        desc: "Compare photos, schedules, amenities and rates. Open the details page for the full picture.",
+      },
+      {
+        title: "Confirm your booking",
+        desc: "Pay online or on arrival. Your request is sent, then confirmed by the team.",
+      },
+    ],
+    cta: "Start my search",
+  },
+  practical: {
+    eyebrow: "Practical info",
+    title: "Everything you need for a smooth arrival.",
+    subtitle: "The essentials before, during and after your stay.",
+    items: [
+      {
+        title: "Flexible payment",
+        desc: "Pay online or on arrival, depending on the option you choose when booking.",
+      },
+      {
+        title: "Check-in & check-out",
+        desc: "Times are listed on each home page. Arriving early? Just let the host know.",
+      },
+      {
+        title: "Clear cancellation",
+        desc: "Policies depend on each home. Keep your booking reference for any change.",
+      },
+      {
+        title: "Dedicated support",
+        desc: "Our team assists you before and during your stay, in French or English.",
+      },
+    ],
+    faqLink: "See the FAQ",
   },
   testimonials: {
     eyebrow: "They traveled with us",

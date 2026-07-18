@@ -5,9 +5,9 @@ export const CURRENCY_OPTIONS: Array<{
   label: string;
   symbol: string;
 }> = [
-  { code: "MAD", label: "MAD — Dirham", symbol: "MAD" },
-  { code: "EUR", label: "EUR — Euro", symbol: "€" },
-  { code: "USD", label: "USD — Dollar", symbol: "$" },
+  { code: "MAD", label: "MAD", symbol: "MAD" },
+  { code: "EUR", label: "EUR", symbol: "€" },
+  { code: "USD", label: "USD", symbol: "$" },
 ];
 
 /** Approximate rates: 1 unit of currency = X MAD */

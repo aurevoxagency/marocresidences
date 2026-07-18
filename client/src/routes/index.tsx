@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   Search,
   MapPin,
@@ -22,8 +23,8 @@ import {
   Sparkles,
   Phone,
   CheckCircle2,
-  Globe2,
-  CircleDollarSign,
+  CreditCard,
+  KeyRound,
   Menu,
 } from "lucide-react";
 
@@ -68,6 +69,9 @@ import {
 } from "@/components/ui/dialog";
 import { HomeFloatingWidgets } from "@/components/home-floating-widgets";
 import { AuthDialog } from "@/components/auth-dialog";
+import { LanguageFlag } from "@/components/language-flag";
+import { CurrencyFlag } from "@/components/currency-flag";
+import { RevealOnScroll, RevealItem } from "@/components/reveal-on-scroll";
 import { CurrencyProvider, useCurrency } from "@/components/currency-provider";
 import { LanguageProvider, useLanguage } from "@/components/language-provider";
 import {
@@ -634,10 +638,10 @@ function Nav({
     <>
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-300",
-        scrolled
-          ? "bg-white/80 shadow-md backdrop-blur-md"
-          : "bg-white",
+        "fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,backdrop-filter,border-color] duration-300",
+        scrolled || authOpen
+          ? "border-b border-black/5 bg-white/80 shadow-md backdrop-blur-md"
+          : "border-b border-transparent bg-transparent",
       )}
     >
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-3 py-3 sm:gap-3 sm:px-6 sm:py-4 lg:px-10">
@@ -645,13 +649,21 @@ function Nav({
           <img
             src={logo}
             alt="Maroc Résidences"
-            className="h-12 w-auto max-w-[240px] object-contain sm:h-14 sm:max-w-[300px]"
+            className={cn(
+              "h-12 w-auto max-w-[240px] object-contain transition duration-300 sm:h-14 sm:max-w-[300px]",
+              !scrolled && !authOpen && "drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)]",
+            )}
           />
         </a>
 
-        <nav className="ml-2 hidden min-w-0 flex-1 items-center justify-center gap-6 text-base font-medium text-foreground/80 lg:flex xl:gap-8">
+        <nav
+          className={cn(
+            "ml-2 hidden min-w-0 flex-1 items-center justify-center gap-6 text-base font-medium transition-colors duration-300 lg:flex xl:gap-8",
+            scrolled || authOpen ? "text-foreground/80" : "text-white/90",
+          )}
+        >
           <DropdownMenu modal={false}>
-            <DropdownMenuTrigger className="inline-flex shrink-0 items-center gap-1.5 opacity-80 outline-none transition-opacity hover:opacity-100 data-[state=open]:opacity-100">
+            <DropdownMenuTrigger className="inline-flex shrink-0 items-center gap-1.5 opacity-90 outline-none transition-opacity hover:opacity-100 data-[state=open]:opacity-100">
               {t.nav.destinations}
               <ChevronDown className="h-4 w-4" />
             </DropdownMenuTrigger>
@@ -686,14 +698,14 @@ function Nav({
             <DropdownMenuTrigger
               className={cn(
                 "group inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold tracking-wide outline-none transition sm:h-10 sm:gap-2 sm:px-3.5 sm:text-sm",
-                "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)]",
-                "hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)]",
+                scrolled || authOpen
+                  ? "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)] hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)] data-[state=open]:bg-[color-mix(in_oklab,var(--olive)_14%,white)] data-[state=open]:text-[var(--olive-deep)]"
+                  : "bg-white/15 text-white hover:bg-white/25 data-[state=open]:bg-white/25",
                 "focus-visible:ring-2 focus-visible:ring-[var(--olive)]/40",
-                "data-[state=open]:bg-[color-mix(in_oklab,var(--olive)_14%,white)] data-[state=open]:text-[var(--olive-deep)]",
               )}
               aria-label={t.nav.language}
             >
-              <Globe2 className="h-4.5 w-4.5 text-[var(--olive-deep)] opacity-90 sm:h-5 sm:w-5" />
+              <LanguageFlag code={language} className="h-[14px] w-[21px] sm:h-4 sm:w-6" />
               <span>{language.toUpperCase()}</span>
               <ChevronDown className="h-3.5 w-3.5 opacity-50 transition group-data-[state=open]:rotate-180" />
             </DropdownMenuTrigger>
@@ -703,10 +715,11 @@ function Nav({
                   key={option.code}
                   onClick={() => setLanguage(option.code)}
                   className={cn(
-                    "cursor-pointer rounded-lg text-sm font-medium",
+                    "cursor-pointer gap-2.5 rounded-lg text-sm font-medium",
                     language === option.code && "bg-[color-mix(in_oklab,var(--olive)_12%,white)] text-[var(--olive-deep)]",
                   )}
                 >
+                  <LanguageFlag code={option.code} />
                   {option.label}
                 </DropdownMenuItem>
               ))}
@@ -717,27 +730,28 @@ function Nav({
             <DropdownMenuTrigger
               className={cn(
                 "group inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold tracking-wide outline-none transition sm:h-10 sm:gap-2 sm:px-3.5 sm:text-sm",
-                "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)]",
-                "hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)]",
+                scrolled || authOpen
+                  ? "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)] hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)] data-[state=open]:bg-[color-mix(in_oklab,var(--olive)_14%,white)] data-[state=open]:text-[var(--olive-deep)]"
+                  : "bg-white/15 text-white hover:bg-white/25 data-[state=open]:bg-white/25",
                 "focus-visible:ring-2 focus-visible:ring-[var(--olive)]/40",
-                "data-[state=open]:bg-[color-mix(in_oklab,var(--olive)_14%,white)] data-[state=open]:text-[var(--olive-deep)]",
               )}
               aria-label={t.nav.currency}
             >
-              <CircleDollarSign className="h-4.5 w-4.5 text-[var(--olive-deep)] opacity-90 sm:h-5 sm:w-5" />
+              <CurrencyFlag code={currency} className="h-[14px] w-[21px] sm:h-4 sm:w-6" />
               <span>{currency}</span>
               <ChevronDown className="h-3.5 w-3.5 opacity-50 transition group-data-[state=open]:rotate-180" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[11rem] rounded-xl p-1.5">
+            <DropdownMenuContent align="end" className="min-w-[7.5rem] rounded-xl p-1.5">
               {CURRENCY_OPTIONS.map((option) => (
                 <DropdownMenuItem
                   key={option.code}
                   onClick={() => setCurrency(option.code)}
                   className={cn(
-                    "cursor-pointer rounded-lg text-sm font-medium",
+                    "cursor-pointer gap-2.5 rounded-lg text-sm font-medium",
                     currency === option.code && "bg-[color-mix(in_oklab,var(--olive)_12%,white)] text-[var(--olive-deep)]",
                   )}
                 >
+                  <CurrencyFlag code={option.code} />
                   {option.label}
                 </DropdownMenuItem>
               ))}
@@ -749,10 +763,10 @@ function Nav({
               <DropdownMenuTrigger
                 className={cn(
                   "group inline-flex h-8 items-center gap-1.5 rounded-full pl-0.5 pr-2 text-sm font-medium outline-none transition sm:h-9 sm:gap-2 sm:pr-3",
-                  "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)]",
-                  "hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)]",
+                  scrolled || authOpen
+                    ? "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)] hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)] data-[state=open]:bg-[color-mix(in_oklab,var(--olive)_14%,white)]"
+                    : "bg-white/15 text-white hover:bg-white/25 data-[state=open]:bg-white/25",
                   "focus-visible:ring-2 focus-visible:ring-[var(--olive)]/40",
-                  "data-[state=open]:bg-[color-mix(in_oklab,var(--olive)_14%,white)]",
                 )}
               >
                 <span
@@ -796,7 +810,12 @@ function Nav({
             <SheetTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)] transition hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)] lg:hidden"
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-full transition lg:hidden",
+                  scrolled || authOpen
+                    ? "bg-[color-mix(in_oklab,var(--ink)_4%,transparent)] text-[var(--ink)] hover:bg-[color-mix(in_oklab,var(--olive)_12%,white)]"
+                    : "bg-white/15 text-white hover:bg-white/25",
+                )}
                 aria-label="Menu"
               >
                 <Menu className="h-4 w-4" />
@@ -1383,7 +1402,11 @@ function Hero({
 
       <Nav destinations={destinations} onSelectDestination={onSelectDestination} />
 
-      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-7xl flex-col items-center justify-center px-4 pt-24 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-24 lg:px-10">
+      <RevealOnScroll
+        className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-7xl flex-col items-center justify-center px-4 pt-24 pb-16 text-center sm:px-6 sm:pt-28 sm:pb-24 lg:px-10"
+        direction="up"
+        once
+      >
         <h1
           className="max-w-4xl text-balance text-[2rem] leading-[1.08] sm:text-5xl sm:leading-[1.02] lg:text-7xl"
           style={{ color: "var(--cream)" }}
@@ -1401,8 +1424,245 @@ function Hero({
         <div className="w-full min-w-0">
           <SearchBar maisons={maisons} onSearch={onSearch} />
         </div>
-      </div>
+      </RevealOnScroll>
     </section>
+  );
+}
+
+function SearchFullscreenLoader() {
+  const { t, language } = useLanguage();
+  const [progress, setProgress] = useState(8);
+  const [stageIndex, setStageIndex] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const stages = t.results.loadingStages;
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => setVisible(true));
+
+    const progressTimer = window.setInterval(() => {
+      setProgress((current) => {
+        if (current >= 94) {
+          return current;
+        }
+        const step = current < 40 ? 4 : current < 70 ? 3 : 1.5;
+        return Math.min(94, current + step);
+      });
+    }, 90);
+
+    const stageTimer = window.setInterval(() => {
+      setStageIndex((current) => Math.min(stages.length - 1, current + 1));
+    }, 420);
+
+    return () => {
+      document.body.style.overflow = previous;
+      window.cancelAnimationFrame(frame);
+      window.clearInterval(progressTimer);
+      window.clearInterval(stageTimer);
+    };
+  }, [stages.length]);
+
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const ringSize = 132;
+  const stroke = 3.5;
+  const radius = (ringSize - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const ringOffset = circumference - (progress / 100) * circumference;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100000] flex items-center justify-center overflow-hidden p-5"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      style={{
+        opacity: visible ? 1 : 0,
+        transition: "opacity 320ms ease",
+      }}
+    >
+      <div className="absolute inset-0 bg-[rgba(12,10,8,0.72)] backdrop-blur-md" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse 70% 50% at 50% 35%, rgba(196,114,74,0.28), transparent 62%), radial-gradient(ellipse 45% 35% at 85% 80%, rgba(63,91,45,0.22), transparent 55%), radial-gradient(ellipse 40% 30% at 12% 75%, rgba(240,178,122,0.12), transparent 50%)",
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.07]"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+        }}
+      />
+
+      <div
+        className="relative z-10 w-full max-w-[420px]"
+        style={{
+          transform: visible ? "translateY(0) scale(1)" : "translateY(18px) scale(0.98)",
+          opacity: visible ? 1 : 0,
+          transition: "transform 480ms cubic-bezier(0.22,1,0.36,1), opacity 480ms ease",
+        }}
+      >
+        <div
+          className="relative overflow-hidden rounded-[28px] border border-white/15 px-7 py-9 text-center shadow-[0_40px_100px_-36px_rgba(0,0,0,0.85)] sm:px-10 sm:py-11"
+          style={{
+            background:
+              "linear-gradient(165deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 45%, rgba(20,16,12,0.35) 100%)",
+            backdropFilter: "blur(22px)",
+          }}
+        >
+          <div
+            className="pointer-events-none absolute -left-16 -top-16 h-40 w-40 rounded-full opacity-50 blur-3xl"
+            style={{ background: "rgba(224,160,96,0.35)" }}
+          />
+          <div
+            className="pointer-events-none absolute -bottom-20 -right-10 h-44 w-44 rounded-full opacity-40 blur-3xl"
+            style={{ background: "rgba(63,91,45,0.45)" }}
+          />
+
+          <div className="relative">
+            <img
+              src={logo}
+              alt="Maroc Résidences"
+              className="mx-auto h-12 w-auto max-w-[240px] object-contain drop-shadow-lg sm:h-14"
+              style={{ animation: "mr-search-float 3s ease-in-out infinite" }}
+            />
+
+            <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/45">
+              Maroc Résidences
+            </p>
+
+            <div className="relative mx-auto mt-7 grid place-items-center">
+              <div
+                className="absolute h-36 w-36 rounded-full opacity-40 blur-2xl"
+                style={{
+                  background:
+                    "radial-gradient(circle, rgba(240,178,122,0.45), transparent 70%)",
+                  animation: "mr-search-pulse 2.4s ease-in-out infinite",
+                }}
+              />
+              <svg width={ringSize} height={ringSize} className="-rotate-90" aria-hidden>
+                <circle
+                  cx={ringSize / 2}
+                  cy={ringSize / 2}
+                  r={radius}
+                  fill="none"
+                  stroke="rgba(255,255,255,0.12)"
+                  strokeWidth={stroke}
+                />
+                <circle
+                  cx={ringSize / 2}
+                  cy={ringSize / 2}
+                  r={radius}
+                  fill="none"
+                  stroke="url(#mrSearchRing)"
+                  strokeWidth={stroke}
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={ringOffset}
+                  style={{ transition: "stroke-dashoffset 180ms linear" }}
+                />
+                <defs>
+                  <linearGradient id="mrSearchRing" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#c45c38" />
+                    <stop offset="50%" stopColor="#e0a060" />
+                    <stop offset="100%" stopColor="#f5e6c8" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute inset-0 grid place-items-center">
+                <div className="text-center">
+                  <p className="font-serif text-4xl tabular-nums leading-none text-[#f7efe3] sm:text-5xl">
+                    {Math.round(progress)}
+                    <span className="ml-0.5 text-lg text-white/45">%</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <h2 className="mt-7 font-serif text-2xl tracking-tight text-[#f7efe3] sm:text-3xl">
+              {t.results.loading.replace("…", "").replace("...", "")}
+            </h2>
+            <p className="mx-auto mt-2 max-w-[280px] text-sm leading-relaxed text-white/65">
+              {t.results.loadingSubtitle}
+            </p>
+
+            <div className="mx-auto mt-7 h-1 max-w-[260px] overflow-hidden rounded-full bg-white/12">
+              <div
+                className="relative h-full rounded-full"
+                style={{
+                  width: `${progress}%`,
+                  background: "linear-gradient(90deg, #b84a2e 0%, #d4924a 55%, #f0d9b0 100%)",
+                  boxShadow: "0 0 16px rgba(212,146,74,0.45)",
+                  transition: "width 180ms linear",
+                }}
+              >
+                <div
+                  className="absolute inset-y-0 w-16"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
+                    animation: "mr-search-shimmer 1.3s ease-in-out infinite",
+                  }}
+                />
+              </div>
+            </div>
+
+            <p
+              key={`${language}-${stageIndex}`}
+              className="mt-5 min-h-[1.25rem] text-xs font-medium tracking-wide text-[color:var(--terracotta-soft)]"
+              style={{ animation: "mr-search-fade-up 380ms ease both" }}
+            >
+              {stages[stageIndex] || stages[0]}
+            </p>
+
+            <div className="mt-6 flex items-center justify-center gap-2">
+              {[MapPin, BedDouble, Star].map((Icon, index) => (
+                <div
+                  key={index}
+                  className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5"
+                  style={{
+                    animation: "mr-search-fade-up 500ms ease both",
+                    animationDelay: `${index * 120}ms`,
+                  }}
+                >
+                  <Icon className="h-3.5 w-3.5 text-white/70" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="mt-5 text-center text-[11px] font-medium uppercase tracking-[0.26em] text-white/35">
+          Vos vacances au Maroc
+        </p>
+      </div>
+
+      <style>{`
+        @keyframes mr-search-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes mr-search-pulse {
+          0%, 100% { opacity: 0.28; transform: scale(0.92); }
+          50% { opacity: 0.55; transform: scale(1.08); }
+        }
+        @keyframes mr-search-fade-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes mr-search-shimmer {
+          0% { transform: translateX(-140%); }
+          100% { transform: translateX(420%); }
+        }
+      `}</style>
+    </div>,
+    document.body
   );
 }
 
@@ -1542,10 +1802,10 @@ function SearchResults({
   return (
     <section
       id="resultats-recherche"
-      className="relative scroll-mt-24 py-20 lg:py-28"
+      className="relative scroll-mt-24 py-12 lg:py-16"
       style={{ background: "linear-gradient(180deg, #f7f1e8 0%, #fbf8f3 45%, #f3eee6 100%)" }}
     >
-      <div className="mx-auto max-w-7xl px-6 lg:px-10">
+      <RevealOnScroll className="mx-auto max-w-7xl px-6 lg:px-10" direction="up">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-3xl">
             <p
@@ -1554,7 +1814,7 @@ function SearchResults({
             >
               {t.results.eyebrow}
             </p>
-            <h2 className="mt-3 text-3xl sm:text-4xl">
+            <h2 className="mt-2 text-2xl sm:text-3xl lg:text-4xl">
               {criteria.destination
                 ? t.results.titleDestination(criteria.destination)
                 : t.results.titleDefault}
@@ -1583,8 +1843,8 @@ function SearchResults({
             </p>
           </div>
         ) : (
-          <div className="mt-12 grid grid-cols-1 gap-8">
-            {results.map((maison) => {
+          <div className="mt-8 grid grid-cols-1 gap-8" id="liste-resultats-recherche">
+            {results.map((maison, index) => {
               const photo = resolvePhotoUrl(maison.photo_principale) || house1;
               const location =
                 [maison.quartier, maison.ville, maison.pays].filter(Boolean).join(" · ") ||
@@ -1599,69 +1859,106 @@ function SearchResults({
               return (
                 <article
                   key={maison.id}
-                  className="group overflow-hidden rounded-[32px] border border-black/5 bg-white shadow-[0_28px_70px_-40px_rgba(58,52,42,0.6)] transition duration-500 hover:-translate-y-1 hover:shadow-[0_36px_80px_-38px_rgba(58,52,42,0.7)]"
+                  data-search-result-card={index === 0 ? "true" : undefined}
+                  className="group relative overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-[0_28px_70px_-40px_rgba(58,52,42,0.55)] transition duration-500 hover:-translate-y-1.5 hover:border-[color-mix(in_oklab,var(--olive)_22%,transparent)] hover:shadow-[0_40px_90px_-42px_rgba(58,52,42,0.72)]"
+                  style={{
+                    animation: "mr-result-card-in 700ms cubic-bezier(0.22,1,0.36,1) both",
+                    animationDelay: `${Math.min(index, 4) * 90}ms`,
+                  }}
                 >
-                  <div className="grid lg:grid-cols-[1.15fr_1fr]">
-                    <div className="relative min-h-[320px] overflow-hidden lg:min-h-full">
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px opacity-0 transition duration-500 group-hover:opacity-100"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, color-mix(in oklab, var(--terracotta) 70%, white), transparent)",
+                    }}
+                  />
+
+                  <div className="grid lg:grid-cols-[1.08fr_1fr]">
+                    <div className="relative min-h-[240px] overflow-hidden sm:min-h-[280px] lg:min-h-full">
                       <img
                         src={photo}
                         alt={maison.nom}
-                        className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                        className="absolute inset-0 h-full w-full object-cover transition duration-[900ms] ease-out group-hover:scale-[1.08]"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-black/10" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/5" />
+                      <div
+                        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 transition duration-700 group-hover:translate-x-full group-hover:opacity-100"
+                        style={{ transitionTimingFunction: "cubic-bezier(0.22,1,0.36,1)" }}
+                      />
 
-                      <div className="absolute inset-x-5 bottom-5 text-white">
-                        <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/80">
+                      <div className="absolute left-4 top-4 flex flex-wrap gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md ring-1 ring-white/20">
+                          <BadgeCheck className="h-3.5 w-3.5" />
+                          {t.results.verified}
+                        </span>
+                        {maison.categorie ? (
+                          <span className="inline-flex rounded-full bg-black/35 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur-md">
+                            {maison.categorie}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {hasRating ? (
+                        <div className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-md ring-1 ring-white/15">
+                          <Star
+                            className="h-3.5 w-3.5 fill-current"
+                            style={{ color: "#f0b27a" }}
+                          />
+                          {rating.toFixed(1)}
+                        </div>
+                      ) : null}
+
+                      <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-6">
+                        <p className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-white/75 transition duration-500 group-hover:text-white">
                           <MapPin className="h-3.5 w-3.5" />
                           {location}
                         </p>
-                        <div className="mt-2 flex items-end justify-between gap-4">
-                          <h3 className="max-w-[90%] text-3xl font-semibold leading-tight">
-                            {maison.nom}
-                          </h3>
-                          {hasRating ? (
-                            <div className="flex shrink-0 items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm backdrop-blur">
-                              <Star
-                                className="h-3.5 w-3.5 fill-current"
-                                style={{ color: "#f0b27a" }}
-                              />
-                              {rating.toFixed(1)}
-                            </div>
-                          ) : null}
-                        </div>
+                        <h3 className="mt-2 max-w-[95%] font-serif text-3xl font-semibold leading-tight tracking-tight transition duration-500 group-hover:translate-x-0.5 sm:text-4xl">
+                          {maison.nom}
+                        </h3>
                       </div>
                     </div>
 
-                    <div className="flex flex-col justify-between p-6 sm:p-8">
-                      <div>
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                          {maison.description?.trim() ||
-                            t.results.defaultDescription}
+                    <div className="relative flex flex-col justify-between p-5 sm:p-7">
+                      <div
+                        className="pointer-events-none absolute -right-10 top-8 h-28 w-28 rounded-full opacity-0 blur-3xl transition duration-700 group-hover:opacity-100"
+                        style={{ background: "color-mix(in oklab, var(--terracotta-soft) 35%, transparent)" }}
+                      />
+
+                      <div className="relative">
+                        <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                          {maison.description?.trim() || t.results.defaultDescription}
                         </p>
 
                         {maison.adresse ? (
-                          <p className="mt-3 text-xs text-foreground/55">
-                            {maison.adresse}
-                            {maison.ville ? ` · ${maison.ville}` : ""}
+                          <p className="mt-3 inline-flex items-start gap-1.5 text-xs text-foreground/55">
+                            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--terracotta)]" />
+                            <span>
+                              {maison.adresse}
+                              {maison.ville ? ` · ${maison.ville}` : ""}
+                            </span>
                           </p>
                         ) : null}
 
-                        <div className="mt-6 grid grid-cols-2 gap-3">
-                          <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
+                        <div className="mt-5 grid grid-cols-2 gap-3">
+                          <div className="rounded-2xl border border-transparent bg-[#f7f2ea] px-3.5 py-3 transition duration-300 group-hover:border-[color-mix(in_oklab,var(--olive)_18%,transparent)] group-hover:bg-[color-mix(in_oklab,var(--olive)_8%,#f7f2ea)]">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
                               <BedDouble className="h-3.5 w-3.5" /> {t.results.rooms}
                             </div>
-                            <p className="mt-1.5 text-xl font-semibold">{maison.nb_chambres || "—"}</p>
+                            <p className="mt-1 text-xl font-semibold tabular-nums" style={{ color: "var(--ink)" }}>
+                              {maison.nb_chambres || "—"}
+                            </p>
                           </div>
-                          <div className="rounded-2xl bg-[#f7f2ea] px-3.5 py-3.5">
+                          <div className="rounded-2xl border border-transparent bg-[#f7f2ea] px-3.5 py-3 transition duration-300 group-hover:border-[color-mix(in_oklab,var(--terracotta)_20%,transparent)] group-hover:bg-[color-mix(in_oklab,var(--terracotta)_8%,#f7f2ea)]">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/45">
                               <Clock3 className="h-3.5 w-3.5" /> Horaires
                             </div>
-                            <p className="mt-1.5 text-sm font-semibold leading-snug">
-                              {(maison.heure_checkin || "14:00").slice(0, 5)}
+                            <p className="mt-1 text-sm font-semibold leading-snug">
+                              Check-in {(maison.heure_checkin || "14:00").slice(0, 5)}
                               <br />
                               <span className="text-foreground/50">
-                                → {(maison.heure_checkout || "12:00").slice(0, 5)}
+                                Check-out {(maison.heure_checkout || "12:00").slice(0, 5)}
                               </span>
                             </p>
                           </div>
@@ -1673,15 +1970,22 @@ function SearchResults({
                               Services & équipements
                             </p>
                             <div className="flex flex-wrap gap-2">
-                              {amenities.map((item) => (
+                              {amenities.map((item, amenityIndex) => (
                                 <span
                                   key={item}
-                                  className="inline-flex items-center gap-1.5 rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75"
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-black/5 bg-[#fbf8f2] px-3 py-1.5 text-xs font-medium text-foreground/75 transition duration-300 hover:-translate-y-0.5 hover:border-[color-mix(in_oklab,var(--terracotta)_25%,transparent)] hover:bg-white hover:shadow-sm"
+                                  style={{
+                                    animation: "mr-result-chip-in 500ms ease both",
+                                    animationDelay: `${220 + amenityIndex * 60}ms`,
+                                  }}
                                 >
                                   {/wifi|internet/i.test(item) ? (
                                     <Wifi className="h-3 w-3" />
                                   ) : (
-                                    <Sparkles className="h-3 w-3" style={{ color: "var(--terracotta)" }} />
+                                    <Sparkles
+                                      className="h-3 w-3"
+                                      style={{ color: "var(--terracotta)" }}
+                                    />
                                   )}
                                   {item}
                                 </span>
@@ -1690,28 +1994,29 @@ function SearchResults({
                           </div>
                         ) : null}
 
-                        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-foreground/60">
+                        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-foreground/60">
                           {maison.telephone ? (
-                            <span className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1.5 transition hover:text-foreground">
                               <Phone className="h-3.5 w-3.5" /> {maison.telephone}
                             </span>
                           ) : null}
                           {maison.whatsapp ? (
-                            <span>WhatsApp {maison.whatsapp}</span>
+                            <span className="transition hover:text-foreground">
+                              WhatsApp {maison.whatsapp}
+                            </span>
                           ) : null}
-                          <span className="inline-flex items-center gap-1.5">
-                            <BadgeCheck className="h-3.5 w-3.5" style={{ color: "var(--olive-deep)" }} />
-                            {t.results.verified}
-                          </span>
                         </div>
                       </div>
 
-                      <div className="mt-7 flex flex-col gap-4 border-t border-black/5 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="relative mt-5 flex flex-col gap-4 border-t border-black/5 pt-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
                             {t.results.pricingFrom} · {roomTypeLabel}
                           </p>
-                          <p className="mt-0.5 text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                          <p
+                            className="mt-0.5 text-2xl font-semibold tracking-tight transition duration-300 group-hover:tracking-normal"
+                            style={{ color: "var(--ink)" }}
+                          >
                             {maison.prix_adulte_min != null &&
                             Number(maison.prix_adulte_min) > 0
                               ? formatMoney(
@@ -1729,17 +2034,18 @@ function SearchResults({
                           <button
                             type="button"
                             onClick={() => void handleOpenDetails(maison)}
-                            className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:bg-[#f7f2ea]"
+                            className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold ring-1 ring-black/10 transition hover:-translate-y-0.5 hover:bg-[#f7f2ea] hover:ring-[color-mix(in_oklab,var(--olive)_25%,transparent)]"
                           >
                             {t.results.details}
                           </button>
                           <button
                             type="button"
                             onClick={() => onReserve(maison)}
-                            className="inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold transition"
+                            className="group/book inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold shadow-[0_10px_24px_-12px_rgba(63,91,45,0.8)] transition hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_16px_30px_-12px_rgba(63,91,45,0.9)]"
                             style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
                           >
-                            {t.results.book} <ArrowUpRight className="h-3.5 w-3.5" />
+                            {t.results.book}
+                            <ArrowUpRight className="h-3.5 w-3.5 transition duration-300 group-hover/book:translate-x-0.5 group-hover/book:-translate-y-0.5" />
                           </button>
                         </div>
                       </div>
@@ -1750,7 +2056,7 @@ function SearchResults({
             })}
           </div>
         )}
-      </div>
+      </RevealOnScroll>
 
       <MaisonDetailsDialog
         maison={detailsMaison}
@@ -1762,6 +2068,17 @@ function SearchResults({
           onReserve(maison);
         }}
       />
+
+      <style>{`
+        @keyframes mr-result-card-in {
+          from { opacity: 0; transform: translateY(22px) scale(0.985); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes mr-result-chip-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </section>
   );
 }
@@ -1778,62 +2095,65 @@ function Destinations({
 
   return (
     <section id="destinations" className="mx-auto max-w-7xl px-6 py-24 lg:px-10 lg:py-32">
-      <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
-        <div className="max-w-xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--terracotta)" }}>
-            {t.destinations.eyebrow}
-          </p>
-          <h2 className="mt-3 text-4xl sm:text-5xl">{t.destinations.title}</h2>
+      <RevealOnScroll>
+        <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
+          <div className="max-w-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--terracotta)" }}>
+              {t.destinations.eyebrow}
+            </p>
+            <h2 className="mt-3 text-4xl sm:text-5xl">{t.destinations.title}</h2>
+          </div>
+          <a
+            href="#maisons"
+            className="group inline-flex items-center gap-2 text-sm font-medium text-foreground/70 transition hover:text-foreground"
+          >
+            {t.destinations.explore}
+            <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+          </a>
         </div>
-        <a
-          href="#maisons"
-          className="group inline-flex items-center gap-2 text-sm font-medium text-foreground/70 transition hover:text-foreground"
-        >
-          {t.destinations.explore}
-          <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-        </a>
-      </div>
 
-      {destinationCards.length === 0 ? (
-        <p className="mt-12 text-sm text-muted-foreground">
-          {t.destinations.empty}
-        </p>
-      ) : (
-        <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {destinationCards.map((d) => (
-            <button
-              key={d.name}
-              type="button"
-              onClick={() => onSelectDestination(d.name)}
-              className="group relative block aspect-[3/4] overflow-hidden rounded-3xl text-left shadow-soft transition hover:shadow-float"
-            >
-              <img
-                src={d.img}
-                alt={d.name}
-                loading="lazy"
-                className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 p-5" style={{ color: "var(--cream)" }}>
-                <div className="text-xs uppercase tracking-[0.18em] opacity-80">
-                  {d.count > 1 ? t.destinations.guestHouses : t.destinations.guestHouse}
-                </div>
-                <div className="mt-1 flex items-end justify-between gap-3">
-                  <h3 className="text-2xl" style={{ color: "var(--cream)" }}>
-                    {d.name}
-                  </h3>
-                  <span
-                    className="glass shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
-                    style={{ color: "var(--ink)" }}
-                  >
-                    {t.destinations.count(d.count)}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+        {destinationCards.length === 0 ? (
+          <p className="mt-12 text-sm text-muted-foreground">
+            {t.destinations.empty}
+          </p>
+        ) : (
+          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {destinationCards.map((d, index) => (
+              <RevealItem key={d.name} delay={index * 0.08}>
+                <button
+                  type="button"
+                  onClick={() => onSelectDestination(d.name)}
+                  className="group relative block aspect-[3/4] w-full overflow-hidden rounded-3xl text-left shadow-soft transition hover:shadow-float"
+                >
+                  <img
+                    src={d.img}
+                    alt={d.name}
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-5" style={{ color: "var(--cream)" }}>
+                    <div className="text-xs uppercase tracking-[0.18em] opacity-80">
+                      {d.count > 1 ? t.destinations.guestHouses : t.destinations.guestHouse}
+                    </div>
+                    <div className="mt-1 flex items-end justify-between gap-3">
+                      <h3 className="text-2xl" style={{ color: "var(--cream)" }}>
+                        {d.name}
+                      </h3>
+                      <span
+                        className="glass shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                        style={{ color: "var(--ink)" }}
+                      >
+                        {t.destinations.count(d.count)}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              </RevealItem>
+            ))}
+          </div>
+        )}
+      </RevealOnScroll>
     </section>
   );
 }
@@ -1869,7 +2189,7 @@ function Houses({
 
   return (
     <section id="maisons" className="relative py-24 lg:py-32" style={{ background: "color-mix(in oklab, var(--sand) 55%, var(--cream))" }}>
-      <div className="mx-auto max-w-7xl px-6 lg:px-10">
+      <RevealOnScroll className="mx-auto max-w-7xl px-6 lg:px-10">
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
           <div className="max-w-xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--olive-deep)" }}>
@@ -1889,7 +2209,7 @@ function Houses({
           </p>
         ) : (
           <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {featured.map((maison) => {
+            {featured.map((maison, index) => {
               const photo = resolvePhotoUrl(maison.photo_principale) || house1;
               const location =
                 [maison.quartier, maison.ville].filter(Boolean).join(", ") || "Maroc";
@@ -1898,77 +2218,76 @@ function Houses({
               const fromDevise = isAppCurrency(maison.devise) ? maison.devise : "MAD";
 
               return (
-                <article
-                  key={maison.id}
-                  className="card-float group overflow-hidden hover:-translate-y-1.5"
-                >
-                  <div className="relative aspect-[5/4] overflow-hidden rounded-t-3xl">
-                    <img
-                      src={photo}
-                      alt={maison.nom}
-                      loading="lazy"
-                      className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
-                    />
-                    {maison.categorie ? (
-                      <span
-                        className="glass absolute left-4 top-4 rounded-full px-3 py-1 text-[11px] font-semibold"
-                        style={{ color: "var(--ink)" }}
-                      >
-                        {maison.categorie}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="p-6">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-xl">{maison.nom}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">{location}</p>
-                      </div>
-                      {hasRating ? (
-                        <div className="flex shrink-0 items-center gap-1 text-sm font-medium">
-                          <Star className="h-4 w-4 fill-current" style={{ color: "var(--terracotta)" }} />
-                          {rating.toFixed(1)}
-                        </div>
+                <RevealItem key={maison.id} delay={index * 0.07}>
+                  <article className="card-float group overflow-hidden hover:-translate-y-1.5">
+                    <div className="relative aspect-[5/4] overflow-hidden rounded-t-3xl">
+                      <img
+                        src={photo}
+                        alt={maison.nom}
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                      />
+                      {maison.categorie ? (
+                        <span
+                          className="glass absolute left-4 top-4 rounded-full px-3 py-1 text-[11px] font-semibold"
+                          style={{ color: "var(--ink)" }}
+                        >
+                          {maison.categorie}
+                        </span>
                       ) : null}
                     </div>
-                    <div className="mt-5 flex items-end justify-between gap-3">
-                      <div>
-                        {maison.prix_adulte_min != null &&
-                        Number(maison.prix_adulte_min) > 0 ? (
-                          <>
-                            <span className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
-                              {formatMoney(
-                                Number(maison.prix_adulte_min),
-                                currency,
-                                fromDevise
-                              )}
-                            </span>
-                            <span className="ml-1 text-sm text-muted-foreground">
-                              {t.houses.perNightAdult}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            {t.houses.onRequest(currencyLabel(currency))}
-                          </span>
-                        )}
+                    <div className="p-6">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-xl">{maison.nom}</h3>
+                          <p className="mt-1 text-sm text-muted-foreground">{location}</p>
+                        </div>
+                        {hasRating ? (
+                          <div className="flex shrink-0 items-center gap-1 text-sm font-medium">
+                            <Star className="h-4 w-4 fill-current" style={{ color: "var(--terracotta)" }} />
+                            {rating.toFixed(1)}
+                          </div>
+                        ) : null}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleOpenDetails(maison)}
-                        className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition"
-                        style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
-                      >
-                        {t.houses.view} <ArrowUpRight className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="mt-5 flex items-end justify-between gap-3">
+                        <div>
+                          {maison.prix_adulte_min != null &&
+                          Number(maison.prix_adulte_min) > 0 ? (
+                            <>
+                              <span className="text-2xl font-semibold" style={{ color: "var(--ink)" }}>
+                                {formatMoney(
+                                  Number(maison.prix_adulte_min),
+                                  currency,
+                                  fromDevise
+                                )}
+                              </span>
+                              <span className="ml-1 text-sm text-muted-foreground">
+                                {t.houses.perNightAdult}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              {t.houses.onRequest(currencyLabel(currency))}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenDetails(maison)}
+                          className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition"
+                          style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
+                        >
+                          {t.houses.view} <ArrowUpRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </article>
+                  </article>
+                </RevealItem>
               );
             })}
           </div>
         )}
-      </div>
+      </RevealOnScroll>
 
       <MaisonDetailsDialog
         maison={detailsMaison}
@@ -1993,31 +2312,196 @@ function Advantages() {
 
   return (
     <section id="experiences" className="mx-auto max-w-7xl px-6 py-24 lg:px-10 lg:py-32">
-      <div className="mx-auto max-w-2xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--terracotta)" }}>
-          {t.advantages.eyebrow}
-        </p>
-        <h2 className="mt-3 text-4xl sm:text-5xl">{t.advantages.title}</h2>
-      </div>
+      <RevealOnScroll>
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--terracotta)" }}>
+            {t.advantages.eyebrow}
+          </p>
+          <h2 className="mt-3 text-4xl sm:text-5xl">{t.advantages.title}</h2>
+        </div>
 
-      <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
-        {t.advantages.items.map(({ title, desc }, index) => {
-          const Icon = advantageIcons[index] ?? ShieldCheck;
+        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+          {t.advantages.items.map(({ title, desc }, index) => {
+            const Icon = advantageIcons[index] ?? ShieldCheck;
 
-          return (
-          <div key={title} className="card-float p-8">
-            <div
-              className="grid h-12 w-12 place-items-center rounded-2xl"
-              style={{ background: "color-mix(in oklab, var(--olive) 15%, white)", color: "var(--olive-deep)" }}
-            >
-              <Icon className="h-5 w-5" />
+            return (
+              <RevealItem key={title} delay={index * 0.1}>
+                <div className="card-float h-full p-8">
+                  <div
+                    className="grid h-12 w-12 place-items-center rounded-2xl"
+                    style={{ background: "color-mix(in oklab, var(--olive) 15%, white)", color: "var(--olive-deep)" }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-6 text-2xl">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{desc}</p>
+                </div>
+              </RevealItem>
+            );
+          })}
+        </div>
+      </RevealOnScroll>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  const { t } = useLanguage();
+  const stepIcons = [Search, BedDouble, CheckCircle2] as const;
+
+  return (
+    <section
+      id="comment-reserver"
+      className="relative overflow-hidden py-24 lg:py-32"
+      style={{
+        background:
+          "linear-gradient(180deg, color-mix(in oklab, var(--sand) 55%, var(--cream)) 0%, var(--cream) 100%)",
+      }}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse 50% 40% at 10% 20%, color-mix(in oklab, var(--olive) 12%, transparent), transparent 60%), radial-gradient(ellipse 45% 35% at 90% 80%, color-mix(in oklab, var(--terracotta) 10%, transparent), transparent 55%)",
+        }}
+      />
+
+      <RevealOnScroll className="relative mx-auto max-w-7xl px-6 lg:px-10">
+        <div className="mx-auto max-w-2xl text-center">
+          <p
+            className="text-xs font-semibold uppercase tracking-[0.2em]"
+            style={{ color: "var(--terracotta)" }}
+          >
+            {t.howItWorks.eyebrow}
+          </p>
+          <h2 className="mt-3 text-4xl sm:text-5xl">{t.howItWorks.title}</h2>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+            {t.howItWorks.subtitle}
+          </p>
+        </div>
+
+        <div className="relative mt-14 grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-6">
+          <div
+            className="pointer-events-none absolute left-[16%] right-[16%] top-[2.75rem] hidden h-px md:block"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent, color-mix(in oklab, var(--olive) 35%, transparent), transparent)",
+            }}
+          />
+
+          {t.howItWorks.steps.map((step, index) => {
+            const Icon = stepIcons[index] ?? Search;
+
+            return (
+              <RevealItem key={step.title} delay={index * 0.12}>
+                <div className="group relative text-center md:px-4">
+                  <div className="relative mx-auto grid h-14 w-14 place-items-center">
+                    <div
+                      className="absolute inset-0 rounded-full opacity-40 blur-xl transition duration-500 group-hover:opacity-70"
+                      style={{ background: "color-mix(in oklab, var(--terracotta-soft) 50%, transparent)" }}
+                    />
+                    <div
+                      className="relative grid h-14 w-14 place-items-center rounded-full text-sm font-semibold shadow-soft ring-4 ring-white transition duration-500 group-hover:-translate-y-1"
+                      style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                    </div>
+                  </div>
+
+                  <div
+                    className="mx-auto mt-5 grid h-11 w-11 place-items-center rounded-2xl transition duration-300 group-hover:scale-105"
+                    style={{
+                      background: "color-mix(in oklab, var(--olive) 12%, white)",
+                      color: "var(--olive-deep)",
+                    }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+
+                  <h3 className="mt-5 text-xl sm:text-2xl">{step.title}</h3>
+                  <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
+                    {step.desc}
+                  </p>
+                </div>
+              </RevealItem>
+            );
+          })}
+        </div>
+
+        <div className="mt-12 flex justify-center">
+          <a
+            href="#top"
+            onClick={(event) => {
+              event.preventDefault();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:brightness-110"
+            style={{ background: "var(--olive-deep)", color: "var(--cream)" }}
+          >
+            {t.howItWorks.cta}
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
+      </RevealOnScroll>
+    </section>
+  );
+}
+
+function PracticalInfo() {
+  const { t } = useLanguage();
+  const icons = [CreditCard, Clock3, KeyRound, Headphones] as const;
+
+  return (
+    <section id="infos-pratiques" className="mx-auto max-w-7xl scroll-mt-24 px-6 py-24 lg:px-10 lg:py-32">
+      <RevealOnScroll>
+        <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <RevealItem direction="left">
+            <div className="max-w-xl">
+              <p
+                className="text-xs font-semibold uppercase tracking-[0.2em]"
+                style={{ color: "var(--terracotta)" }}
+              >
+                {t.practical.eyebrow}
+              </p>
+              <h2 className="mt-3 text-4xl sm:text-5xl">{t.practical.title}</h2>
+              <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                {t.practical.subtitle}
+              </p>
+              <a
+                href="#faq"
+                className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-foreground/70 transition hover:text-foreground"
+              >
+                {t.practical.faqLink}
+                <ArrowRight className="h-4 w-4" />
+              </a>
             </div>
-            <h3 className="mt-6 text-2xl">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{desc}</p>
+          </RevealItem>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {t.practical.items.map((item, index) => {
+              const Icon = icons[index] ?? ShieldCheck;
+
+              return (
+                <RevealItem key={item.title} delay={0.08 + index * 0.08} direction="right">
+                  <div className="group h-full rounded-[24px] border border-black/5 bg-white p-6 shadow-[0_20px_50px_-40px_rgba(58,52,42,0.55)] transition duration-400 hover:-translate-y-1 hover:border-[color-mix(in_oklab,var(--olive)_20%,transparent)] hover:shadow-[0_28px_60px_-38px_rgba(58,52,42,0.65)]">
+                    <div
+                      className="grid h-11 w-11 place-items-center rounded-2xl transition duration-300 group-hover:scale-105"
+                      style={{
+                        background: "color-mix(in oklab, var(--olive) 12%, white)",
+                        color: "var(--olive-deep)",
+                      }}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-5 text-xl">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.desc}</p>
+                  </div>
+                </RevealItem>
+              );
+            })}
           </div>
-          );
-        })}
-      </div>
+        </div>
+      </RevealOnScroll>
     </section>
   );
 }
@@ -2059,7 +2543,7 @@ function Testimonials() {
         className="relative scroll-mt-24 py-24 lg:py-32"
         style={{ background: "var(--ink)" }}
       >
-        <div className="mx-auto max-w-7xl px-6 lg:px-10">
+        <RevealOnScroll className="mx-auto max-w-7xl px-6 lg:px-10">
           <div className="mx-auto max-w-2xl text-center">
             <p
               className="text-xs font-semibold uppercase tracking-[0.2em]"
@@ -2077,7 +2561,7 @@ function Testimonials() {
               {t.testimonials.empty}
             </p>
           </div>
-        </div>
+        </RevealOnScroll>
       </section>
     );
   }
@@ -2088,7 +2572,7 @@ function Testimonials() {
       className="relative scroll-mt-24 py-24 lg:py-32"
       style={{ background: "var(--ink)" }}
     >
-      <div className="mx-auto max-w-7xl px-6 lg:px-10">
+      <RevealOnScroll className="mx-auto max-w-7xl px-6 lg:px-10">
         <div className="mx-auto max-w-2xl text-center">
           <p
             className="text-xs font-semibold uppercase tracking-[0.2em]"
@@ -2182,7 +2666,7 @@ function Testimonials() {
             ) : null}
           </Carousel>
         )}
-      </div>
+      </RevealOnScroll>
     </section>
   );
 }
@@ -2255,7 +2739,7 @@ function AvisForm({ maisons }: { maisons: MaisonListItem[] }) {
       className="relative scroll-mt-24 py-24 lg:py-32"
       style={{ background: "linear-gradient(180deg, #fbf8f3 0%, #f3eee6 100%)" }}
     >
-      <div className="mx-auto max-w-7xl px-6 lg:px-10">
+      <RevealOnScroll className="mx-auto max-w-7xl px-6 lg:px-10">
         <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <div className="max-w-xl">
             <p
@@ -2408,7 +2892,7 @@ function AvisForm({ maisons }: { maisons: MaisonListItem[] }) {
             )}
           </div>
         </div>
-      </div>
+      </RevealOnScroll>
     </section>
   );
 }
@@ -2418,40 +2902,42 @@ function FaqSection() {
 
   return (
     <section id="faq" className="mx-auto max-w-7xl scroll-mt-24 px-6 py-24 lg:px-10 lg:py-32">
-      <div className="mx-auto max-w-2xl text-center">
-        <p
-          className="text-xs font-semibold uppercase tracking-[0.2em]"
-          style={{ color: "var(--terracotta)" }}
-        >
-          {t.faq.eyebrow}
-        </p>
-        <h2 className="mt-3 text-4xl sm:text-5xl">{t.faq.title}</h2>
-        <p className="mt-4 text-sm text-muted-foreground">
-          {t.faq.subtitle}
-        </p>
-      </div>
+      <RevealOnScroll>
+        <div className="mx-auto max-w-2xl text-center">
+          <p
+            className="text-xs font-semibold uppercase tracking-[0.2em]"
+            style={{ color: "var(--terracotta)" }}
+          >
+            {t.faq.eyebrow}
+          </p>
+          <h2 className="mt-3 text-4xl sm:text-5xl">{t.faq.title}</h2>
+          <p className="mt-4 text-sm text-muted-foreground">
+            {t.faq.subtitle}
+          </p>
+        </div>
 
-      <div className="mx-auto mt-12 max-w-3xl rounded-[28px] border border-black/5 bg-white px-5 py-2 shadow-[0_28px_70px_-48px_rgba(58,52,42,0.45)] sm:px-8">
-        <Accordion type="single" collapsible className="w-full">
-          {t.faq.items.map((item, index) => (
-            <AccordionItem
-              key={item.question}
-              value={`faq-${index}`}
-              className="border-black/5"
-            >
-              <AccordionTrigger
-                className="py-5 text-base font-semibold hover:no-underline"
-                style={{ color: "var(--ink)" }}
+        <div className="mx-auto mt-12 max-w-3xl rounded-[28px] border border-black/5 bg-white px-5 py-2 shadow-[0_28px_70px_-48px_rgba(58,52,42,0.45)] sm:px-8">
+          <Accordion type="single" collapsible className="w-full">
+            {t.faq.items.map((item, index) => (
+              <AccordionItem
+                key={item.question}
+                value={`faq-${index}`}
+                className="border-black/5"
               >
-                {item.question}
-              </AccordionTrigger>
-              <AccordionContent className="pb-5 text-sm leading-relaxed text-muted-foreground">
-                {item.answer}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      </div>
+                <AccordionTrigger
+                  className="py-5 text-base font-semibold hover:no-underline"
+                  style={{ color: "var(--ink)" }}
+                >
+                  {item.question}
+                </AccordionTrigger>
+                <AccordionContent className="pb-5 text-sm leading-relaxed text-muted-foreground">
+                  {item.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      </RevealOnScroll>
     </section>
   );
 }
@@ -2461,43 +2947,45 @@ function CTA() {
 
   return (
     <section className="mx-auto max-w-7xl px-6 py-24 lg:px-10 lg:py-32">
-      <div
-        className="relative overflow-hidden rounded-4xl px-8 py-20 text-center sm:px-16"
-        style={{
-          background:
-            "linear-gradient(135deg, var(--terracotta) 0%, oklch(0.55 0.12 38) 60%, var(--olive-deep) 130%)",
-        }}
-      >
+      <RevealOnScroll>
         <div
-          className="pointer-events-none absolute inset-0 opacity-30"
+          className="relative overflow-hidden rounded-4xl px-8 py-20 text-center sm:px-16"
           style={{
-            backgroundImage:
-              "radial-gradient(1200px 400px at 20% 0%, white, transparent 60%), radial-gradient(800px 300px at 80% 100%, white, transparent 60%)",
+            background:
+              "linear-gradient(135deg, var(--terracotta) 0%, oklch(0.55 0.12 38) 60%, var(--olive-deep) 130%)",
           }}
-        />
-        <div className="relative">
-          <h2 className="mx-auto max-w-3xl text-4xl sm:text-6xl" style={{ color: "var(--cream)" }}>
-            {t.cta.title}
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-base sm:text-lg" style={{ color: "color-mix(in oklab, var(--cream) 88%, transparent)" }}>
-            {t.cta.subtitle}
-          </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <button
-              className="inline-flex items-center gap-2 rounded-full px-7 py-4 text-sm font-semibold shadow-float transition hover:-translate-y-0.5"
-              style={{ background: "var(--cream)", color: "var(--ink)" }}
-            >
-              {t.cta.button} <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              className="inline-flex items-center gap-2 rounded-full px-7 py-4 text-sm font-medium ring-1 transition hover:bg-white/10"
-              style={{ color: "var(--cream)", borderColor: "color-mix(in oklab, white 40%, transparent)" }}
-            >
-              {t.cta.concierge}
-            </button>
+        >
+          <div
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={{
+              backgroundImage:
+                "radial-gradient(1200px 400px at 20% 0%, white, transparent 60%), radial-gradient(800px 300px at 80% 100%, white, transparent 60%)",
+            }}
+          />
+          <div className="relative">
+            <h2 className="mx-auto max-w-3xl text-4xl sm:text-6xl" style={{ color: "var(--cream)" }}>
+              {t.cta.title}
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-base sm:text-lg" style={{ color: "color-mix(in oklab, var(--cream) 88%, transparent)" }}>
+              {t.cta.subtitle}
+            </p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <button
+                className="inline-flex items-center gap-2 rounded-full px-7 py-4 text-sm font-semibold shadow-float transition hover:-translate-y-0.5"
+                style={{ background: "var(--cream)", color: "var(--ink)" }}
+              >
+                {t.cta.button} <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-full px-7 py-4 text-sm font-medium ring-1 transition hover:bg-white/10"
+                style={{ color: "var(--cream)", borderColor: "color-mix(in oklab, white 40%, transparent)" }}
+              >
+                {t.cta.concierge}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </RevealOnScroll>
     </section>
   );
 }
@@ -2548,7 +3036,7 @@ function Footer() {
         }}
       />
 
-      <div className="relative mx-auto max-w-7xl px-6 pb-10 pt-16 lg:px-10 lg:pb-12 lg:pt-20">
+      <RevealOnScroll className="relative mx-auto max-w-7xl px-6 pb-10 pt-16 lg:px-10 lg:pb-12 lg:pt-20">
         <div className="grid gap-12 lg:grid-cols-[1.35fr_1fr_1fr_1fr]">
           <div className="max-w-md">
             <a href="#" className="inline-block">
@@ -2620,7 +3108,7 @@ function Footer() {
             </a>
           </div>
         </div>
-      </div>
+      </RevealOnScroll>
     </footer>
   );
 }
@@ -2747,12 +3235,8 @@ function Landing() {
     setSearching(true);
     setResults([]);
 
-    window.setTimeout(() => {
-      document.getElementById("resultats-recherche")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 40);
+    const startedAt = Date.now();
+    const MIN_LOADER_MS = 1800;
 
     try {
       const catalog = await fetchMaisonsCatalog(next.destination || undefined, {
@@ -2792,7 +3276,47 @@ function Landing() {
     } catch {
       setResults([]);
     } finally {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, MIN_LOADER_MS - elapsed);
+
+      if (remaining > 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, remaining));
+      }
+
       setSearching(false);
+
+      window.setTimeout(() => {
+        const headerOffset = 96;
+        const firstCard = document.querySelector<HTMLElement>(
+          "[data-search-result-card='true']"
+        );
+        const section = document.getElementById("resultats-recherche");
+        const target = firstCard || section;
+
+        if (!target) {
+          return;
+        }
+
+        const rect = target.getBoundingClientRect();
+        const absoluteTop = window.scrollY + rect.top;
+        const viewHeight = window.innerHeight;
+        const available = viewHeight - headerOffset - 24;
+        let nextTop: number;
+
+        if (firstCard && rect.height <= available) {
+          // Center the full card in the visible area under the fixed nav
+          nextTop =
+            absoluteTop - headerOffset - Math.max(0, (available - rect.height) / 2);
+        } else {
+          // Card taller than viewport: pin its top just under the nav
+          nextTop = absoluteTop - headerOffset - 12;
+        }
+
+        window.scrollTo({
+          top: Math.max(0, nextTop),
+          behavior: "smooth",
+        });
+      }, 80);
     }
   };
 
@@ -2816,6 +3340,7 @@ function Landing() {
     <CurrencyProvider>
       <LanguageProvider>
         <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
+          {searching ? <SearchFullscreenLoader /> : null}
           <Hero
             maisons={maisons}
             onSearch={handleSearch}
@@ -2830,8 +3355,10 @@ function Landing() {
           <Destinations maisons={maisons} onSelectDestination={handleSelectDestination} />
           <Houses maisons={maisons} onSelectDestination={handleSelectDestination} />
           <Advantages />
+          <HowItWorks />
           <Testimonials />
           <AvisForm maisons={maisons} />
+          <PracticalInfo />
           <FaqSection />
           <CTA />
           <Footer />

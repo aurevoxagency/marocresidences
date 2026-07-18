@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { motion } from "framer-motion";
 
 import logo from "@/assets/header-maroc-residences-removebg-preview.png";
 import loaderVideo from "@/assets/15296840_1920_1080_30fps.mp4";
@@ -45,6 +46,8 @@ export function AppSplashLoader({ children }: { children: ReactNode }) {
     };
   }, [visible]);
 
+  const revealPage = exiting || !visible;
+
   const ringSize = 128;
   const stroke = 3;
   const radius = (ringSize - stroke) / 2;
@@ -53,7 +56,21 @@ export function AppSplashLoader({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {children}
+      <motion.div
+        initial={{ x: "-8%", opacity: 0 }}
+        animate={
+          revealPage
+            ? { x: 0, opacity: 1 }
+            : { x: "-8%", opacity: 0 }
+        }
+        transition={{
+          duration: 1.05,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        style={{ willChange: "transform, opacity" }}
+      >
+        {children}
+      </motion.div>
       {visible && (
         <div
           className="fixed inset-0 z-[9999] overflow-hidden"
